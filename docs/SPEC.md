@@ -377,7 +377,7 @@ Render exports: `init(canvas)`, `resize()`, `draw(dtReal)`, `screenToWorld(clien
 `{wx, wy, tx, ty, inside}`. Sprites exports: `iconURL(kind, id)` → PNG data URL (cached) for
 kinds `'wall','trap','monster','boss','object','hero','heroBoss','tile'`, plus anything else you
 need internally.
-- Canvas backing size = `S.cols*TS*RS × S.rows*TS*RS` with internal scale RS = 2 (crisp text);
+- Canvas backing size = `S.cols*TS*RS × S.rows*TS*RS`; RS is 2 for crisp text, dropping to 1 automatically when the board is shown at ≤ 1 device px per canvas px (no visible loss, far fewer pixels to rasterize);
   `imageSmoothingEnabled=false`. The canvas is CSS-scaled by the UI layout to fit its container
   (keep aspect ratio; do the fitting in `resize()` using the parent element's size, and call it
   on window resize). `screenToWorld` must invert that exactly.

@@ -1238,10 +1238,11 @@ const Sprites = (() => {
     for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
       const v = b.px[y * w + x];
       if (!(v >>> 24)) continue;
-      const sx = flip ? w - 1 - x : x;
       const nv = variantPixel(v, b.edge ? b.edge[y * w + x] === 1 : false, variant);
       if (!nv) continue;
-      if (rot) out[sx * cw + (h - 1 - y)] = nv; else out[y * cw + sx] = nv;
+      // Corpses lie rotated 90° clockwise (head to the right); `flip` mirrors the lying body (head left).
+      if (rot) out[x * cw + (flip ? y : h - 1 - y)] = nv;
+      else out[y * cw + (flip ? w - 1 - x : x)] = nv;
     }
     g.putImageData(img, 0, 0);
     return c;
@@ -1531,7 +1532,7 @@ const Sprites = (() => {
  * -------------------------------------------------------------------------- */
 const Render = (() => {
   /* ---- 2.1 Constants & state ---------------------------------------------- */
-  const RS = 2;                 // backing-store scale (crisp text)
+  let RS = 2;                   // backing-store scale: 2 for crisp text; 1 when the board is shown ≤ 1 device px per canvas px
   const ART = 2;                // canvas px per art pixel
   const LPT = 8;                // light-map pixels per tile
   const FOOT = 10;              // feet sit this many px below an entity's centre
@@ -1545,6 +1546,7 @@ const Render = (() => {
   let cols = 0, rows = 0, W = 0, H = 0;
   let time = 0, frameNo = 0, dt = 0;
   let lastPW = -1, lastPH = -1;
+  let hudK = 1;                 // HUD/text scale so overlays stay legible on boards shown below 1 CSS px per canvas px
   const pad = { l: 0, t: 0, r: 0, b: 0 };
 
   // Offscreen layers
@@ -1605,15 +1607,19 @@ const Render = (() => {
     if (!canvas || !S || !S.cols) return;
     if (S.cols !== cols || S.rows !== rows || !stat) {
       cols = S.cols; rows = S.rows; W = cols * TS; H = rows * TS;
-      canvas.width = W * RS; canvas.height = H * RS;
-      ctx.imageSmoothingEnabled = false;
-      stat = mk(W * RS, H * RS); sctx = stat.getContext('2d'); statVer = -1; statS = null;
       lightC = mk(cols * LPT, rows * LPT); lctx = lightC.getContext('2d');
       dangerC = mk(cols, rows); dctx = dangerC.getContext('2d'); dangerImg = dctx.createImageData(cols, rows); dangerVer = -1; dangerS = null;
-      gridC = buildGrid();
       vignette = buildVignette();
+      allocBacking();
     }
     fit();
+  }
+  /** Backing store + layers whose resolution depends on RS. */
+  function allocBacking() {
+    canvas.width = W * RS; canvas.height = H * RS;
+    ctx.imageSmoothingEnabled = false;
+    stat = mk(W * RS, H * RS); sctx = stat.getContext('2d'); statVer = -1; statS = null;
+    gridC = buildGrid();
   }
 
   /** Size taken by the canvas's in-flow siblings (they share the container with the board). */
@@ -1668,6 +1674,10 @@ const Render = (() => {
     if (snapS > 0 && snapS >= s * 0.9) s = snapS;
     const cw = Math.max(1, Math.floor(W * s)), ch = Math.max(1, Math.floor(H * s));
     st.width = cw + 'px'; st.height = ch + 'px';
+    // Shown at ≤ 1 device px per canvas px, a 2× backing store only costs fill rate: drop to 1×.
+    const rs = s * dpr > 1 + 1e-6 ? 2 : 1;
+    if (rs !== RS) { RS = rs; allocBacking(); }
+    hudK = Math.max(1, Math.min(1.75, 1 / s));
     // Upscaling: keep pixels crisp; downscaling: let the browser filter smoothly.
     st.imageRendering = s * dpr >= RS - 1e-6 ? 'pixelated' : 'auto';
     if (!shared) {
@@ -1982,7 +1992,25 @@ const Render = (() => {
   }
 
   let heartBeat = 0;
+  let heartFade = 1;            // < 1 while something stands/is built on the tile the crystal covers
   const heartRect = { x: 0, y: 0, w: 0, h: 0, on: false };
+  /** Heart hit flash (suppressed while paused — its timer only runs with the simulation). */
+  const heartHit = () => S.heartHitT > 0 && !S.paused;
+  /** Is anything on the tile north of the Heart (or on the Heart tile, behind the crystal)? */
+  function heartCovers() {
+    const hx = S.heart.x + 0.5, hy = S.heart.y;
+    const t = Grid.tile(S.heart.x, S.heart.y - 1);
+    if (t && t.s && (t.s.cat === 'trap' || t.s.cat === 'object')) return true;
+    for (let k = 0; k < 2; k++) {
+      const arr = k ? S.monsters : S.heroes;
+      for (let i = 0; i < arr.length; i++) {
+        const e = arr[i];
+        if (e.removed || e.escaped || (e.dead && (e.deadT || 0) > 0.7)) continue;
+        if (Math.abs(e.x - hx) < 1 && e.y >= hy - 1.15 && e.y < hy + 0.8) return true;
+      }
+    }
+    return false;
+  }
   function drawHeart() {
     heartRect.on = false;
     const cx = (S.heart.x + 0.5) * TS, cy = (S.heart.y + 0.5) * TS;
@@ -1997,8 +2025,9 @@ const Render = (() => {
     const ph = (time % period) / period;
     heartBeat = ph < 0.14 ? Math.sin(ph / 0.14 * Math.PI) : (ph > 0.2 && ph < 0.3 ? 0.5 * Math.sin((ph - 0.2) / 0.1 * Math.PI) : 0);
     const hover = Math.sin(time * 1.7) * 1.5;
+    const hit = heartHit();
     ctx.globalCompositeOperation = 'lighter';
-    ctx.globalAlpha = 0.45 + 0.35 * heartBeat + (S.heartHitT > 0 ? 0.4 : 0);
+    ctx.globalAlpha = 0.45 + 0.35 * heartBeat + (hit ? 0.4 : 0);
     const gs = 70 + heartBeat * 12;
     ctx.drawImage(Sprites.glow('#ff1a3c'), cx - gs / 2, cy - 14 - gs / 2 - hover, gs, gs);
     ctx.globalCompositeOperation = 'source-over';
@@ -2006,11 +2035,13 @@ const Render = (() => {
     const sc = 1 + 0.06 * heartBeat;
     const w = 48 * sc, h = 48 * sc;
     const x = snap(cx - w / 2), y = snap(cy - 6 - hover - h + 8 * sc);
-    const variant = S.heartHitT > 0 ? V.WHITE : V.NORMAL;
+    const variant = hit ? V.WHITE : V.NORMAL;
+    ctx.globalAlpha = heartFade; // see-through while it would hide whatever is behind it
     ctx.drawImage(Sprites.canvasOf(R.heart, 0, variant, false), x, y, w, h);
     heartRect.x = x; heartRect.y = y; heartRect.w = w; heartRect.h = h; heartRect.on = true;
     const stage = ratio < 0.25 ? 3 : ratio < 0.5 ? 2 : ratio < 0.75 ? 1 : 0;
     if (stage && variant === V.NORMAL) ctx.drawImage(Sprites.canvasOf(CRACKS[stage], 0, 0, false), x, y, w, h);
+    ctx.globalAlpha = 1;
     // Rune ring on the altar glows with the beat.
     ctx.globalCompositeOperation = 'lighter';
     ctx.globalAlpha = 0.25 + 0.3 * heartBeat;
@@ -2034,6 +2065,7 @@ const Render = (() => {
     for (let i = 0; i < hs.length; i++) { const h = hs[i]; if (!h.removed && !h.escaped) drawList.push(h); else h._rvis = false; }
     for (let i = 0; i < ms.length; i++) { const m = ms[i]; if (!m.removed) drawList.push(m); else m._rvis = false; }
     heartMarker.y = S.heart.y + 0.8;
+    heartFade = heartCovers() ? 0.5 : 1;
     drawList.push(heartMarker);
     sortByDepth(drawList);
     for (let i = 0; i < drawList.length; i++) {
@@ -2045,21 +2077,30 @@ const Render = (() => {
     ctx.globalAlpha = 1;
   }
 
+  /**
+   * Corpses: the lying body continues the death fall exactly (same sprite and scale,
+   * same foot pivot, head toward the fall side) and fades in while the falling body
+   * fades out, then fades away at the end of its life.
+   */
   function drawCorpses() {
     const cs = S.corpses;
     if (!cs || !cs.length) return;
     const rm = Sprites.canvasOf(R.remains, 0, 0, false);
+    const life = CFG.corpseLife;
     for (let i = 0; i < cs.length; i++) {
-      const c = cs[i], r = HERO[c.type];
-      const a = Math.max(0, Math.min(1, c.t / 2.5));
-      if (a <= 0) continue;
-      const x = c.x * TS, y = c.y * TS;
+      const c = cs[i];
+      const boss = c.boss && HBOSS[c.boss] ? c.boss : null;
+      const r = boss ? HBOSS[boss] : HERO[c.type];
+      const a = Math.max(0, Math.min(1, c.t / 2.5)) * Math.max(0, Math.min(1, (life - c.t) / 0.7));
+      if (a <= 0 || !r) continue;
+      const scale = boss ? 3 : 2, left = c.face < 0;
+      const px = c.x * TS, py = c.y * TS + FOOT + (boss ? 2 : 0);   // the fall's pivot (feet)
+      const cw = r.h * scale, ch = r.w * scale;                       // rotated sprite size
+      const x0 = left ? px - r.foot * scale : px + (r.foot - r.h) * scale, y0 = py - ch / 2;
       ctx.globalAlpha = a * 0.9;
-      ctx.drawImage(rm, snap(x - 16), snap(y - 12), 32, 32);
-      if (r) {
-        const cv = Sprites.canvasOf(r, 0, V.CORPSE, (c.uid & 1) === 1);
-        ctx.drawImage(cv, snap(x - cv.width), snap(y - cv.height + 8), cv.width * 2, cv.height * 2);
-      }
+      ctx.drawImage(rm, snap(x0 + cw / 2 - 8 * scale), snap(py - 10 * scale), 16 * scale, 16 * scale);
+      ctx.globalAlpha = a;
+      ctx.drawImage(Sprites.canvasOf(r, 0, V.CORPSE, left), snap(x0), snap(y0), cw, ch);
     }
     ctx.globalAlpha = 1;
   }
@@ -2096,8 +2137,9 @@ const Render = (() => {
     const hidden = s.hidden && !s.revealed;
     const grey = s.disarmed || (s.broken && s.id !== 'pit');
     const variant = grey ? V.GREY : V.NORMAL;
-    const base = hidden ? 0.55 : 1;
     const d = s.data || {};
+    const recharging = S.phase === 'wave' && !grey && (s.cd > 0 || d.rearmT > 0);
+    const base = (hidden ? 0.55 : 1) * (recharging ? 0.62 : 1); // dimmed while recharging
     ctx.globalAlpha = base;
     switch (s.id) {
       case 'spike':
@@ -2436,26 +2478,30 @@ const Render = (() => {
     ctx.globalAlpha = 1;
   }
 
-  /* ---- 2.9 Readability overlays: bars, statuses, badges (drawn after lighting) ------ */
+  /* ---- 2.9 Readability overlays: bars, statuses, badges (drawn after lighting) ------
+   * Sizes are multiplied by hudK (≥ 1) so bars, icons and text stay legible when a
+   * large board is shown below 1 CSS px per canvas px.                               */
   const CH_COL = { loot: '#ffd84a', disarm: '#7ae8ff', blast: '#d08aff', dig: '#d8a070' };
   const CH_ICON = { loot: 'i_coin', disarm: 'i_wrench', blast: 'i_blast', dig: 'i_pick' };
   const icoBuf = [];
   let icoN = 0;
   const hpColor = k => (k > 0.6 ? '#5ee06a' : k > 0.3 ? '#ffd24a' : '#ff4a3a');
+  /** HUD thickness: scaled by hudK and rounded up to whole backing pixels (crisp bars). */
+  const hk = v => Math.ceil(v * hudK * RS) / RS;
   function bar(x, y, w, h, k, col) {
     k = k > 1 ? 1 : k < 0 ? 0 : k;
     ctx.fillStyle = '#0b060d'; ctx.fillRect(x - 1, y - 1, w + 2, h + 2);
     ctx.fillStyle = '#3a2430'; ctx.fillRect(x, y, w, h);
     ctx.fillStyle = col; ctx.fillRect(x, y, Math.round(w * k * RS) / RS, h);
-    ctx.fillStyle = 'rgba(255,255,255,0.28)'; ctx.fillRect(x, y, Math.round(w * k * RS) / RS, 0.5);
+    ctx.fillStyle = 'rgba(255,255,255,0.28)'; ctx.fillRect(x, y, Math.round(w * k * RS) / RS, h * 0.25);
   }
   function cdRing(cx, cy, r, k, col) {
     k = k > 1 ? 1 : k < 0 ? 0 : k;
     ctx.globalAlpha = 0.9; ctx.fillStyle = '#0b060d';
-    ctx.beginPath(); ctx.arc(cx, cy, r + 1.5, 0, TAU); ctx.fill();
-    ctx.strokeStyle = '#3a2a40'; ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.arc(cx, cy, r + 1.5 * hudK, 0, TAU); ctx.fill();
+    ctx.strokeStyle = '#3a2a40'; ctx.lineWidth = 1.5 * hudK;
     ctx.beginPath(); ctx.arc(cx, cy, r, 0, TAU); ctx.stroke();
-    ctx.strokeStyle = col; ctx.lineWidth = 2;
+    ctx.strokeStyle = col; ctx.lineWidth = 2 * hudK;
     ctx.beginPath(); ctx.arc(cx, cy, r, -Math.PI / 2, -Math.PI / 2 + TAU * k); ctx.stroke();
     if (k >= 1) {
       ctx.globalAlpha = 0.6 + 0.4 * Math.sin(time * 9);
@@ -2464,9 +2510,10 @@ const Render = (() => {
     ctx.globalAlpha = 1;
   }
   function pushIcon(name) { if (icoN < 12) icoBuf[icoN++] = R[name]; }
+  /** Row of status icons centred on cx with its bottom edge at y. */
   function drawIconRow(cx, y, alpha) {
     if (!icoN) return;
-    const sz = 10.5, gap = 9.5;
+    const sz = 10.5 * hudK, gap = 9.5 * hudK;
     const x0 = cx - (icoN * gap) / 2 + (gap - sz) / 2;
     ctx.globalAlpha = alpha;
     for (let i = 0; i < icoN; i++) ctx.drawImage(Sprites.canvasOf(icoBuf[i], 0, 0, false), snap(x0 + i * gap), snap(y - sz), sz, sz);
@@ -2485,13 +2532,14 @@ const Render = (() => {
     if (hero && st.exposed) pushIcon('i_eye');
     if (st.invisT > 0) pushIcon('i_invis');
   }
-  function stunStars(cx, cy) {
-    const st = R.i_star;
+  /** Stars circling the head (below the HP bar). */
+  function stunStars(cx, cy, rx) {
+    const st = R.i_star, sz = 6 * hudK;
     for (let i = 0; i < 3; i++) {
       const a = time * 5 + i * (TAU / 3);
-      const x = cx + Math.cos(a) * 8, y = cy + Math.sin(a) * 2.5;
+      const x = cx + Math.cos(a) * rx, y = cy + Math.sin(a) * 2.5;
       ctx.globalAlpha = Math.sin(a) > 0 ? 1 : 0.6;
-      ctx.drawImage(Sprites.canvasOf(st, 0, 0, false), snap(x - 3), snap(y - 3), 6, 6);
+      ctx.drawImage(Sprites.canvasOf(st, 0, 0, false), snap(x - sz / 2), snap(y - sz / 2), sz, sz);
     }
     ctx.globalAlpha = 1;
   }
@@ -2519,11 +2567,19 @@ const Render = (() => {
       if (!m._rvis || m.dead || m.removed || m.disguised || !m._rrec || !(m.flashT > 0)) continue;
       ctx.globalAlpha = 0.85; drawSprite(m._rrec, m._rfr, V.WHITE, m._rflip, m._rpx, m._rfoot, m._rsc);
     }
-    if (heartRect.on && S.heartHitT > 0) {
-      ctx.globalAlpha = Math.min(1, S.heartHitT / 0.25) * 0.8;
+    if (heartRect.on && heartHit()) {
+      ctx.globalAlpha = Math.min(1, S.heartHitT / 0.25) * 0.8 * heartFade;
       ctx.drawImage(Sprites.canvasOf(R.heart, 0, V.WHITE, false), heartRect.x, heartRect.y, heartRect.w, heartRect.h);
     }
     ctx.globalAlpha = 1;
+  }
+  function pennant(h, top) {
+    let pc = 0;
+    const pid = h.party && h.party.id;
+    if (typeof pid === 'number') pc = Math.abs(pid) % 5; else if (typeof pid === 'string') pc = pid.length % 5;
+    const f = pc + (Math.floor(time * 3 + h.uid) & 1) * 5;
+    const fx = h._rpx - (h.face < 0 ? -1 : 1) * 7;
+    ctx.drawImage(Sprites.canvasOf(R.pennant, f, 0, h.face < 0), snap(fx - 1), snap(top - 9), 7, 10);
   }
   function drawEntityHUD() {
     const wave = S.phase === 'wave';
@@ -2532,46 +2588,37 @@ const Render = (() => {
       const h = hs[i];
       if (!h._rvis || h.dead || h.removed || h.escaped) continue;
       const boss = h.boss && HBOSS[h.boss] ? h.boss : null;
-      const invis = h.st && h.st.invisT > 0;
-      const a = invis ? 0.45 : 1;
-      const w = boss ? 30 : 18, bh = boss ? 3 : 2;
+      const a = h.st && h.st.invisT > 0 ? 0.45 : 1;
+      const w = boss ? 30 : 18, bh = hk(boss ? 3 : 2);
       const x = snap(h._rpx - w / 2);
-      let y = snap(h._rtop - (boss ? 6 : 4));
+      let y = snap(h._rtop - 2 - bh);   // HP bar sits just above the head
       ctx.globalAlpha = a;
+      // Pennant first (it sits behind the bars), then the bars on top.
+      if (h.leader && !boss) pennant(h, h._rtop);
+      if (h.loot > 0) { // loot sack slung on the back
+        const bx = h._rpx - (h.face < 0 ? -1 : 1) * 9;
+        ctx.drawImage(Sprites.canvasOf(R.i_sack, 0, 0, false), snap(bx - 6), snap(h._rpy - 20), 12, 12);
+      }
       bar(x, y, w, bh, h.hp / Math.max(1, h.maxHp), hpColor(h.hp / Math.max(1, h.maxHp)));
       if (boss) {
         const cd = h.abilityCd > 0 ? 1 - Math.max(0, h.abilityT || 0) / h.abilityCd : 1;
-        cdRing(x - 6, y + 1.5, 3.5, cd, HBOSS_AURA[boss]);
-        ctx.font = font(8); ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic';
-        ctx.lineWidth = 2.5; ctx.strokeStyle = '#0b060d'; ctx.lineJoin = 'round';
+        const rr = 3.5 * hudK;
+        cdRing(x - rr - 2.5, y + bh / 2, rr, cd, HBOSS_AURA[boss]);
         ctx.globalAlpha = a;
-        ctx.strokeText(HBOSS_SHORT[boss], h._rpx, y - 3); ctx.fillStyle = HBOSS_AURA[boss]; ctx.fillText(HBOSS_SHORT[boss], h._rpx, y - 3);
-        y -= 10;
+        label(HBOSS_SHORT[boss], h._rpx, y - 2 - 4 * hudK, HBOSS_AURA[boss], 8);
+        y -= 3 + 8 * hudK;
       }
       if (h.channel && h.channel.max > 0) {
-        const kind = h.channel.kind;
-        bar(x + 3, y - 4, w - 3, 2, channelProgress(h), CH_COL[kind] || '#ffffff');
+        const kind = h.channel.kind, ch = hk(2), isz = 7.5 * hudK;
+        const cy = y - 3 - ch;
+        bar(x + 3, cy, w - 3, ch, channelProgress(h), CH_COL[kind] || '#ffffff');
         const ic = R[CH_ICON[kind]];
-        if (ic) ctx.drawImage(Sprites.canvasOf(ic, 0, 0, false), x - 5, y - 6.5, 7.5, 7.5);
-        y -= 6;
+        if (ic) ctx.drawImage(Sprites.canvasOf(ic, 0, 0, false), snap(x - isz + 2), snap(cy + ch / 2 - isz / 2), isz, isz);
+        y = cy;
       }
       statusIcons(h, true);
-      drawIconRow(h._rpx, y - 1.5, a);
-      if (h.st && h.st.stunT > 0) stunStars(h._rpx, h._rtop - 1);
-      if (h.loot > 0) { // loot sack slung on the back
-        const bx = h._rpx - (h.face < 0 ? -1 : 1) * 9;
-        ctx.globalAlpha = a;
-        ctx.drawImage(Sprites.canvasOf(R.i_sack, 0, 0, false), snap(bx - 6), snap(h._rpy - 20), 12, 12);
-      }
-      if (h.leader && !boss) {
-        let pc = 0;
-        const pid = h.party && h.party.id;
-        if (typeof pid === 'number') pc = pid % 5; else if (typeof pid === 'string') pc = pid.length % 5;
-        const f = pc + (Math.floor(time * 3 + h.uid) & 1) * 5;
-        const fx = h._rpx - (h.face < 0 ? -1 : 1) * 7;
-        ctx.globalAlpha = a;
-        ctx.drawImage(Sprites.canvasOf(R.pennant, f, 0, h.face < 0), snap(fx - 1), snap(h._rtop - 9), 7, 10);
-      }
+      drawIconRow(h._rpx, y - 2, a);
+      if (h.st && h.st.stunT > 0) stunStars(h._rpx, h._rtop + (boss ? 8 : 5), boss ? 12 : 8);
       ctx.globalAlpha = 1;
     }
     const ms = S.monsters;
@@ -2579,14 +2626,14 @@ const Render = (() => {
       const m = ms[i];
       if (!m._rvis || m.dead || m.removed || m.disguised) continue;
       const hurt = m.hp < m.maxHp - 0.5;
-      const w = m.isBoss ? 30 : 16, bh = m.isBoss ? 3 : 2;
+      const w = m.isBoss ? 30 : 16, bh = hk(m.isBoss ? 3 : 2);
       const x = snap(m._rpx - w / 2);
-      let y = snap(m._rtop - (m.isBoss ? 3 : 3));
+      const y = snap(m._rtop - 1 - bh);
       if (hurt || (m.isBoss && wave)) bar(x, y, w, bh, m.hp / Math.max(1, m.maxHp), m.isBoss ? '#ff6a2a' : '#e8384a');
-      if (m.isBoss && m.abilityCd > 0) cdRing(x - 6, y + 1.5, 3.5, 1 - Math.max(0, m.abilityT || 0) / m.abilityCd, '#ff9a3c');
+      if (m.isBoss && m.abilityCd > 0) { const rr = 3.5 * hudK; cdRing(x - rr - 2.5, y + bh / 2, rr, 1 - Math.max(0, m.abilityT || 0) / m.abilityCd, '#ff9a3c'); }
       statusIcons(m, false);
       drawIconRow(m._rpx, y - 2, 1);
-      if (m.st && m.st.stunT > 0) stunStars(m._rpx, m._rtop);
+      if (m.st && m.st.stunT > 0) stunStars(m._rpx, m._rtop + (m.isBoss ? 10 : 5), m.isBoss ? 13 : 8);
       if (m.level > 1) {
         ctx.fillStyle = '#0b060d';
         for (let l = 1; l < m.level; l++) ctx.fillRect(snap(m._rpx - 4 + (l - 1) * 5 - 0.5) + (m.level === 2 ? 2.5 : 0), snap(m._rpy + 1.5), 4, 4);
@@ -2595,12 +2642,25 @@ const Render = (() => {
       }
     }
   }
-  /** Trap/object badges: secret (closed eye), visible-in-torchlight (eye), revealed '!', disarmed tag, broken cracks, level pips, barricade HP. */
+  /**
+   * Remaining recharge of a trap as a fraction (0..1), or -1 when armed. The full
+   * duration is learnt from the value seen when a cycle starts, so perk-modified
+   * cooldowns (Quick Reload, Stonemason, Trapmaster rearm) are measured exactly.
+   */
+  function rechargeLeft(s) {
+    const v = Math.max(s.cd > 0 ? s.cd : 0, s.data && s.data.rearmT > 0 ? s.data.rearmT : 0);
+    if (v <= 0) { s._rcdMax = 0; return -1; }
+    if (!(s._rcdMax >= v)) s._rcdMax = v;
+    return v / s._rcdMax;
+  }
+  /** Trap/object badges: secret (closed eye), visible-in-torchlight (eye), revealed '!', disarmed tag, broken cracks, recharge bar, level pips, barricade HP. */
   function drawStructHUD() {
-    const ss = S.structs;
+    const ss = S.structs, wave = S.phase === 'wave';
+    const bk = Math.min(hudK, 1.4);
     for (let i = 0; i < ss.length; i++) {
       const s = ss[i];
       const x = s.x * TS, y = s.y * TS;
+      let pipY = y + 26;
       if (s.cat === 'trap') {
         let badge = null;
         if (s.disarmed) badge = R.i_disarm;
@@ -2608,8 +2668,9 @@ const Render = (() => {
         else if (s.hidden && !s.revealed && !s.broken) badge = trapKnown(s) ? R.i_known : R.i_hidden;
         if (badge) {
           const bob = badge === R.i_bang ? Math.round(Math.sin(time * 6 + s.uid) * 1) : 0;
+          const bw = badge.w * 1.5 * bk, bhh = badge.h * 1.5 * bk;
           ctx.globalAlpha = badge === R.i_hidden ? 0.85 : 1;
-          ctx.drawImage(Sprites.canvasOf(badge, 0, 0, false), x + 21, y + 1 + bob, badge.w * 1.5, badge.h * 1.5);
+          ctx.drawImage(Sprites.canvasOf(badge, 0, 0, false), x + 32 - bw - 0.5, y + 1 + bob, bw, bhh);
           ctx.globalAlpha = 1;
         }
         if (s.broken && s.id !== 'pit') {
@@ -2617,12 +2678,20 @@ const Render = (() => {
           ctx.fillRect(x + 7, y + 9, 6, 1.5); ctx.fillRect(x + 12, y + 10, 1.5, 6); ctx.fillRect(x + 12, y + 15, 7, 1.5);
           ctx.fillRect(x + 18, y + 16, 1.5, 7); ctx.fillRect(x + 19, y + 22, 5, 1.5);
         }
+        if (wave && !s.disarmed) {
+          const left = rechargeLeft(s);
+          if (left > 0 && s._rcdMax >= 2.5) { // recharge bar for traps with a meaningful cooldown
+            const bh = hk(2);
+            bar(x + 5, y + 31 - bh, 22, bh, 1 - left, '#8fd8ff');
+            pipY = y + 29 - bh - 4;
+          }
+        }
       }
-      if (s.cat === 'object' && s.id === 'barricade' && !s.broken && s.maxHp && s.hp < s.maxHp) bar(x + 6, y + 1, 20, 2, s.hp / s.maxHp, '#d8a050');
+      if (s.cat === 'object' && s.id === 'barricade' && !s.broken && s.maxHp && s.hp < s.maxHp) bar(x + 6, y + 1, 20, hk(2), s.hp / s.maxHp, '#d8a050');
       if ((s.cat === 'trap' || s.cat === 'object') && s.level > 1) {
         for (let l = 1; l < s.level; l++) {
-          ctx.fillStyle = '#0b060d'; ctx.fillRect(x + 2 + (l - 1) * 5, y + 26, 4, 4);
-          ctx.fillStyle = '#ffd24a'; ctx.fillRect(x + 2.5 + (l - 1) * 5, y + 26.5, 3, 3);
+          ctx.fillStyle = '#0b060d'; ctx.fillRect(x + 2 + (l - 1) * 5, pipY, 4, 4);
+          ctx.fillStyle = '#ffd24a'; ctx.fillRect(x + 2.5 + (l - 1) * 5, pipY + 0.5, 3, 3);
         }
       }
     }
@@ -2705,10 +2774,14 @@ const Render = (() => {
       for (let i = 0; i < ts.length; i++) {
         const t = ts[i];
         const k = t.life / t.max, age = t.max - t.life;
-        const size = Math.max(6, Math.round(t.size * (age < 0.1 ? 0.7 + age * 3 : 1)));
+        const full = Math.max(6, Math.round(t.size * hudK));
+        if (t._rsz !== full) { ctx.font = font(full); t._rw = ctx.measureText(t.str).width; t._rsz = full; lastF = -1; } // measured once per size
+        const size = Math.max(6, Math.round(full * (age < 0.1 ? 0.7 + age * 3 : 1)));
         if (size !== lastF) { ctx.font = font(size); ctx.lineWidth = Math.max(2, size * 0.3); lastF = size; }
         ctx.globalAlpha = k < 0.35 ? k / 0.35 : 1;
-        const x = t.x * TS, y = t.y * TS;
+        // Keep the whole text inside the board (callouts near the edges would be clipped).
+        const half = t._rw * size / full / 2 + ctx.lineWidth;
+        const x = Math.max(half, Math.min(W - half, t.x * TS)), y = Math.max(size * 0.6 + 1, t.y * TS);
         ctx.strokeText(t.str, x, y);
         ctx.fillStyle = t.color; ctx.fillText(t.str, x, y);
       }
@@ -2870,9 +2943,13 @@ const Render = (() => {
     }
     return g.res;
   }
+  /** Outlined label (scaled by hudK), kept horizontally inside the board. */
   function label(str, x, y, col, size) {
-    ctx.font = font(size || 8); ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    ctx.lineJoin = 'round'; ctx.lineWidth = 3; ctx.strokeStyle = '#0b060d';
+    const sz = Math.round((size || 8) * hudK);
+    ctx.font = font(sz); ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.lineJoin = 'round'; ctx.lineWidth = 3 * hudK; ctx.strokeStyle = '#0b060d';
+    const half = ctx.measureText(str).width / 2 + 2 * hudK;
+    x = Math.max(half, Math.min(W - half, x));
     ctx.strokeText(str, x, y); ctx.fillStyle = col; ctx.fillText(str, x, y);
   }
   function drawGhost() {
@@ -2958,7 +3035,7 @@ const Render = (() => {
     } else if (pw === 'fear') {
       const h = Spatial.nearestHero(wx, wy, 0.9);
       if (h) {
-        const immune = HERO_CLASSES[h.type] && (HERO_CLASSES[h.type].fearImmune || h.boss);
+        const immune = typeof Status.fearImmune === 'function' ? Status.fearImmune(h) : !!(h.boss || (HERO_CLASSES[h.type] && HERO_CLASSES[h.type].fearImmune));
         const col = immune ? '#9a9aa8' : '#c07aff';
         ctx.strokeStyle = col; ctx.lineWidth = 2; ctx.globalAlpha = 0.95;
         ctx.setLineDash(DASH); ctx.lineDashOffset = -time * 12;
@@ -2992,7 +3069,9 @@ const Render = (() => {
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over';
     ctx.imageSmoothingEnabled = false;
-    const sx = Math.round((FX.shakeX || 0) * RS) / RS, sy = Math.round((FX.shakeY || 0) * RS) / RS;
+    // FX timers don't advance while paused: freeze-frame without shake/flashes.
+    const live = !S.paused;
+    const sx = live ? Math.round((FX.shakeX || 0) * RS) / RS : 0, sy = live ? Math.round((FX.shakeY || 0) * RS) / RS : 0;
     // The static layer is opaque; the backdrop only shows at the edges while the camera shakes.
     if (sx || sy) { ctx.fillStyle = DARK; ctx.fillRect(0, 0, canvas.width, canvas.height); }
     ctx.setTransform(RS, 0, 0, RS, sx * RS, sy * RS);
@@ -3020,7 +3099,7 @@ const Render = (() => {
       ctx.imageSmoothingEnabled = true; ctx.drawImage(vignette, 0, 0, W, H); ctx.drawImage(vignette, 0, 0, W, H); ctx.imageSmoothingEnabled = false;
     }
     const f = FX.screenFlash;
-    if (f && f.max > 0) {
+    if (f && f.max > 0 && live) {
       ctx.globalAlpha = Math.max(0, Math.min(1, f.life / f.max)) * 0.6;
       ctx.fillStyle = f.color; ctx.fillRect(0, 0, W, H);
       ctx.globalAlpha = 1;

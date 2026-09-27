@@ -809,15 +809,21 @@ const Objects = (() => {
     }
   }
 
-  /** Wave end: drop claims; lair summons are removed by Monsters.onWaveEnd. */
+  /**
+   * Wave end: drop claims (lair summons are removed by Monsters.onWaveEnd) and
+   * mend standing barricades to full HP. Smashed ones still need a repair.
+   */
   function onWaveEnd() {
+    let mended = false;
     for (const s of S.structs) {
       if (s.cat !== 'object' || !OBJECTS[s.id]) continue;
       const d = initData(s);
       s.animT = 0;
       if (s.id === 'chest') d.claimedBy = null;
       if (s.id === 'lair') { d.alive = 0; d.spawnT = FIRST_SPAWN; }
+      if (s.id === 'barricade' && !s.broken && s.maxHp && s.hp < s.maxHp) { s.hp = s.maxHp; mended = true; }
     }
+    if (mended) Path.bump(); // Path.baseCost scales with barricade HP
   }
 
   /* ---- 2.3 Lairs --------------------------------------------------------------- */
@@ -912,7 +918,7 @@ const Objects = (() => {
         break;
       }
       case 'barricade':
-        out.push(`HP: ${Math.ceil(s.hp || 0)}/${s.maxHp || def.hp}`, 'Heroes must smash through it');
+        out.push(`HP: ${Math.ceil(s.hp || 0)}/${s.maxHp || def.hp}`, 'Heroes must smash through it', 'Mends between waves; repair if smashed');
         if (s.broken) {
           const c = Build.repairCost(s);
           out.push(c > 0 ? `Status: Smashed — repair for ${c}g` : 'Status: Smashed — repair is free');

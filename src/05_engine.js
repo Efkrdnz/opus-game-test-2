@@ -946,8 +946,8 @@ const Heart = {
       S.heartPulseT = CFG.heartPulseCd;
       const near = Spatial.heroesInRadius(this.cx(), this.cy(), CFG.heartPulseRange);
       if (near.length) {
-        const dmg = CFG.heartPulseDmg * (hasPerk('thorns') ? 3 : 1);
-        for (const h of near) Combat.damage(h, dmg, { team: 'dm', kind: 'heart', id: 'heart', elem: 'magic' });
+        const mul = hasPerk('thorns') ? 3 : 1;
+        for (const h of near) Combat.damage(h, (CFG.heartPulseDmg + CFG.heartPulsePct * h.maxHp) * mul, { team: 'dm', kind: 'heart', id: 'heart', elem: 'magic' });
         FX.ring(this.cx(), this.cy(), { color: hasPerk('thorns') ? '#ff3b6b' : '#ff7a9a', r0: 0.4, r1: CFG.heartPulseRange + 0.3, life: 0.45, width: 3 });
       }
     }

@@ -79,10 +79,11 @@ const SIM_DT = 1 / 60;     // fixed simulation step
 const CFG = {
   startGold: 320,
   heartHp: 100,
-  heartPulseDmg: 8,        // damage per pulse to heroes adjacent to the Heart
+  heartPulseDmg: 12,       // flat damage per pulse to heroes adjacent to the Heart…
+  heartPulsePct: 0.12,     // …plus this fraction of each hero's max HP, so leaks are short and sharp
   heartPulseCd: 1.0,
   heartPulseRange: 1.6,    // from Heart tile centre
-  heartRegenPerWave: 5,    // Heart HP restored after each survived wave
+  heartRegenPerWave: 8,    // Heart HP restored after each survived wave
   sellRate: 0.6,           // fraction refunded when selling
   repairRate: 0.3,         // repair cost as fraction of base cost
   upgradeRate: [0, 0.6, 0.9], // upgrade cost to reach level 2 / 3 (index = current level) × base cost
@@ -135,14 +136,14 @@ const WALL_DEF = {
 const HERO_CLASSES = {
   warrior: {
     name: 'Warrior', role: 'Vanguard', color: '#d0873a',
-    hp: 120, speed: 1.5, dmg: 10, atkCd: 1.0, range: 1.2, heartDmg: 6,
+    hp: 120, speed: 1.5, dmg: 10, atkCd: 1.0, range: 1.2, heartDmg: 3,
     gold: 12, threat: 3, dangerW: 0.3, trapW: 0.15, greed: 0.35, minWave: 1,
     engageR: 2.5, // actively charges monsters this close
     desc: 'High HP. Charges monsters in melee and walks straight through traps.',
   },
   rogue: {
     name: 'Rogue', role: 'Thief', color: '#5fae5a',
-    hp: 60, speed: 2.4, dmg: 8, atkCd: 0.7, range: 1.2, heartDmg: 4,
+    hp: 60, speed: 2.4, dmg: 8, atkCd: 0.7, range: 1.2, heartDmg: 2,
     gold: 10, threat: 2, dangerW: 0.8, trapW: 1.0, greed: 1.0, minWave: 1,
     detect: 0.35,   // chance per second to spot each hidden trap within detectR
     detectR: 2.2,
@@ -152,14 +153,14 @@ const HERO_CLASSES = {
   },
   ranger: {
     name: 'Ranger', role: 'Scout', color: '#3f9c8f',
-    hp: 65, speed: 1.8, dmg: 10, atkCd: 1.1, range: 5, ranged: true, proj: 'arrow', heartDmg: 4,
+    hp: 65, speed: 1.8, dmg: 10, atkCd: 1.1, range: 5, ranged: true, proj: 'arrow', heartDmg: 2,
     gold: 11, threat: 2, dangerW: 0.9, trapW: 1.0, greed: 0.5, minWave: 2,
     revealR: 3,     // automatically reveals hidden traps within this radius
     desc: 'Shoots monsters from range and reveals hidden traps around them.',
   },
   mage: {
     name: 'Mage', role: 'Arcanist', color: '#6a6cf0',
-    hp: 50, speed: 1.4, dmg: 15, atkCd: 1.4, range: 4.5, ranged: true, proj: 'bolt', heartDmg: 5,
+    hp: 50, speed: 1.4, dmg: 15, atkCd: 1.4, range: 4.5, ranged: true, proj: 'bolt', heartDmg: 3,
     gold: 13, threat: 3, dangerW: 1.0, trapW: 1.0, greed: 0.45, minWave: 3,
     blastCd: 12,       // seconds between wall-blast attempts
     blastTime: 1.2,    // channel time
@@ -168,14 +169,14 @@ const HERO_CLASSES = {
   },
   cleric: {
     name: 'Cleric', role: 'Healer', color: '#e8e0b0',
-    hp: 75, speed: 1.4, dmg: 5, atkCd: 1.2, range: 1.2, holy: true, heartDmg: 3,
+    hp: 75, speed: 1.4, dmg: 5, atkCd: 1.2, range: 1.2, holy: true, heartDmg: 2,
     gold: 12, threat: 3, dangerW: 1.15, trapW: 1.1, greed: 0.3, minWave: 4,
     healAmt: 12, healCd: 2.0, healR: 3.5,
     desc: 'Heals the most wounded nearby ally. Weak attacks, but holy damage hurts undead double.',
   },
   paladin: {
     name: 'Paladin', role: 'Holy Knight', color: '#f0d060',
-    hp: 180, speed: 1.3, dmg: 14, atkCd: 1.1, range: 1.2, holy: true, heartDmg: 7,
+    hp: 180, speed: 1.3, dmg: 14, atkCd: 1.1, range: 1.2, holy: true, heartDmg: 4,
     gold: 20, threat: 5, dangerW: 0.5, trapW: 0.4, greed: 0.25, minWave: 8,
     engageR: 2.5, fearImmune: true, fireResist: 0.5,
     lohPct: 0.5, // Lay on Hands: once per wave, saves an ally within 4 tiles from death, healing to 50%
@@ -183,7 +184,7 @@ const HERO_CLASSES = {
   },
   miner: {
     name: 'Dwarf Miner', role: 'Sapper', color: '#b07048',
-    hp: 105, speed: 1.25, dmg: 9, atkCd: 1.0, range: 1.2, heartDmg: 6,
+    hp: 105, speed: 1.25, dmg: 9, atkCd: 1.0, range: 1.2, heartDmg: 3,
     gold: 16, threat: 4, dangerW: 0.7, trapW: 0.8, greed: 0.7, minWave: 12,
     digTime: 2.0, pitImmune: true,
     desc: 'Tunnels straight through your walls and never falls into pits.',

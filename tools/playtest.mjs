@@ -45,22 +45,24 @@ for (let run = 0; run < runs; run++) {
     const afford = (cat, id) => S().gold >= Build.cost(cat, id);
     const place = (cat, id, x, y) => { const r = Build.place(cat, id, x, y); return r && r.ok; };
 
-    function buildMaze() {
+    /** Serpentine plan: vertical wall lines every 3 columns (alternating gaps), built from the Heart side outward, within a gold budget. */
+    function buildMaze(maxSpend) {
       const s = S();
+      const start = s.gold;
       const hx = s.heart.x;
-      // Vertical wall lines every 3 columns between x=3 and heart-3, alternating gap top/bottom.
-      let flip = false;
-      for (let c = 3; c <= hx - 3; c += 3) {
-        const gapY = flip ? s.rows - 2 : 1;
-        flip = !flip;
+      const cols = [];
+      for (let c = 3; c <= hx - 3; c += 3) cols.push(c);
+      cols.reverse(); // Heart side first: that's where the killing happens
+      cols.forEach((c, k) => {
+        const gapY = k % 2 ? 1 : s.rows - 2;
         for (let y = 1; y < s.rows - 1; y++) {
-          if (Math.abs(y - gapY) <= 0) continue;
+          if (y === gapY) continue;
+          if (start - s.gold + Build.cost('wall', 'wall') > maxSpend) return;
           const t = Grid.tile(c, y);
           if (!t || t.type !== T.FLOOR || t.s) continue;
-          if (!afford('wall', 'wall')) return;
           place('wall', 'wall', c, y);
         }
-      }
+      });
     }
     function routeTiles() { return Path.preview().filter(p => { const t = Grid.tile(p.x, p.y); return t && t.type === T.FLOOR && !t.s; }); }
     function placeTrapsAlongRoute(maxSpend) {
@@ -136,12 +138,11 @@ for (let run = 0; run < runs; run++) {
     function buildPhase() {
       const s = S();
       Build.repairAll();
-      if (strategy !== 'monsters') buildMaze();
       const g = s.gold;
-      if (strategy === 'traps') { placeTrapsAlongRoute(g); upgrades(s.gold); }
+      if (strategy === 'traps') { buildMaze(g * 0.3); placeTrapsAlongRoute(s.gold); upgrades(s.gold); }
       else if (strategy === 'monsters') { placeMonsters(g); upgrades(s.gold); }
-      else if (strategy === 'maze') { placeTrapsAlongRoute(g * 0.3); }
-      else { placeLures(); placeTrapsAlongRoute(g * 0.45); placeMonsters(g * 0.35); upgrades(s.gold * 0.8); }
+      else if (strategy === 'maze') { buildMaze(g * 0.7); placeTrapsAlongRoute(s.gold); }
+      else { buildMaze(g * 0.3); placeLures(); placeTrapsAlongRoute(g * 0.35); placeMonsters(g * 0.25); upgrades(s.gold * 0.8); }
     }
     function castPowers() {
       const s = S(); const P = DH.Powers;

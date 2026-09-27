@@ -93,7 +93,8 @@
     const my = H.corridor();
     const s = H.place('trap', 'pit', 5, my);
     H.startWave(); H.keepAlive();
-    H.hero('rogue', 2, my, { hp: 20 });
+    const r = H.hero('rogue', 2, my, { hp: 20 });
+    r.ai.disarmFail.add(s.uid); // about the reset power, not the rogue's disarm roll
     H.until(() => s.broken, 15);
     H.assert(s.broken, 'pit broken');
     H.S.mana = 100;

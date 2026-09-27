@@ -183,18 +183,33 @@ const Grid = {
   },
 
   /**
-   * Line of sight between two world points: false if any wall/rock lies between.
-   * (Barricades do not block sight.)
+   * Exact grid traversal (Amanatides & Woo) of the segment A→B. Returns false as soon as the
+   * segment enters a solid tile. The start tile is never tested; the end tile only if
+   * `includeEnd`. A segment passing exactly through a tile corner must have both side tiles clear.
+   * Line of sight and projectile wall checks share this so they can never disagree.
    */
-  los(ax, ay, bx, by) {
-    const d = dist(ax, ay, bx, by);
-    const steps = Math.ceil(d / 0.2);
-    for (let i = 1; i < steps; i++) {
-      const t = i / steps;
-      if (this.isSolid(Math.floor(ax + (bx - ax) * t), Math.floor(ay + (by - ay) * t))) return false;
+  traceClear(ax, ay, bx, by, includeEnd) {
+    let x = Math.floor(ax), y = Math.floor(ay);
+    const ex = Math.floor(bx), ey = Math.floor(by);
+    const dx = bx - ax, dy = by - ay;
+    const stepX = dx > 0 ? 1 : -1, stepY = dy > 0 ? 1 : -1;
+    const tdx = dx !== 0 ? Math.abs(1 / dx) : Infinity, tdy = dy !== 0 ? Math.abs(1 / dy) : Infinity;
+    let tmx = dx !== 0 ? (dx > 0 ? x + 1 - ax : ax - x) * tdx : Infinity;
+    let tmy = dy !== 0 ? (dy > 0 ? y + 1 - ay : ay - y) * tdy : Infinity;
+    let n = Math.abs(ex - x) + Math.abs(ey - y);
+    while (n > 0) {
+      if (tmx < tmy - 1e-9) { x += stepX; tmx += tdx; n--; }
+      else if (tmy < tmx - 1e-9) { y += stepY; tmy += tdy; n--; }
+      else { // exactly through a corner
+        if (this.isSolid(x + stepX, y) || this.isSolid(x, y + stepY)) return false;
+        x += stepX; y += stepY; tmx += tdx; tmy += tdy; n -= 2;
+      }
+      if ((includeEnd || x !== ex || y !== ey) && this.isSolid(x, y)) return false;
     }
     return true;
   },
+  /** Line of sight between two world points: false if any wall/rock lies strictly between (barricades don't block). */
+  los(ax, ay, bx, by) { return this.traceClear(ax, ay, bx, by, false); },
 
   /** Turn a WALL tile back into floor (mage blast / miner dig). Destroys any mounted trap. */
   destroyWall(x, y, cause) {
@@ -878,8 +893,9 @@ const Proj = {
         }
       }
       const step = p.speed * dt;
+      const ox = p.x, oy = p.y;
       p.x += p.dx * step; p.y += p.dy * step; p.travelled += step;
-      if (!p.ghost && Grid.isSolid(Math.floor(p.x), Math.floor(p.y))) { this._end(p); continue; }
+      if (!p.ghost && !Grid.traceClear(ox, oy, p.x, p.y, true)) { this._end(p); continue; }
       if (p.travelled >= p.range) { this._end(p); continue; }
       if (!p.target) {
         const foes = p.team === 'dm' ? S.heroes : S.monsters;

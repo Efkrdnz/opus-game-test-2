@@ -375,7 +375,7 @@ const Monsters = (() => {
       skipUid: 0, skipT: 0, skipVer: -1,                         // a hero we could not reach
       stranded: false, sx: 0, sy: 0, strandT: 0, strandVer: -1,  // cut off from home: guard (sx,sy)
       unreach: false, blocked: false, repathT: 0, pathVer: -1, goalTx: -1, goalTy: -1,
-      wanderT: Math.random() * 2, wx: m.x, wy: m.y,
+      wanderT: Math.random() * 2, wx: m.x, wy: m.y, wax: m.x, way: m.y, // wander point & the anchor it belongs to
       alarmT: 0, ax: 0, ay: 0, alarmR: 0,
       webT: 0.5 + Math.random(), kiteT: 0, kx: NaN, ky: NaN,
       calmT: 0, lastHp: m.hp, regenFxT: 0, ambT: Math.random() * 2, hold: false,
@@ -699,7 +699,9 @@ const Monsters = (() => {
       if (!approach(m, ax, ay, dt, 0.05) && ai.goalTx === Math.floor(ax) && ai.goalTy === Math.floor(ay)) strand(m);
       return;
     }
-    if (m.state !== 'idle') { m.state = 'idle'; ai.wx = ax; ai.wy = ay; ai.wanderT = randRange(0.8, 2); }
+    if (m.state !== 'idle' || ai.wax !== ax || ai.way !== ay) { // (re)settling, or the anchor moved: wander afresh
+      m.state = 'idle'; ai.wax = ax; ai.way = ay; ai.wx = ax; ai.wy = ay; ai.wanderT = randRange(0.8, 2);
+    }
     if (!alarmed && !ai.stranded && d <= WANDER_R + 0.1) regen(m, dt);
     if (m.type === 'mimic') { steer(m, ax, ay, moveSpeed(m) * dt, 0.01, false); return; } // mimics sit still
     if ((ai.wanderT -= dt) <= 0) pickWander(m, ax, ay);

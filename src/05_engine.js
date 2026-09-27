@@ -432,6 +432,8 @@ const Path = {
   baseCost(x, y, i) {
     const t = S.tiles[i];
     if (t.type === T.WALL || t.type === T.ROCK) return Infinity;
+    // The Heart is a valid goal but nobody should walk *through* it; every route to it pays this equally.
+    if (t.type === T.HEART) return 50;
     let c = 1;
     const s = t.s;
     if (s) {
@@ -802,6 +804,7 @@ const Combat = {
       if (hasPerk('soul_harvest')) S.mana = Math.min(S.manaMax, S.mana + 4);
       if (t.boss) {
         S.stats.bossKills++;
+        if (S.ws) S.ws.bossKilled = true;
         FX.shake(12); FX.flash('#fff', 0.25);
         FX.burst(t.x, t.y, { n: 70, colors: ['#ffffff', '#ffd84a', '#ff9a3c'], speed: 5, life: 1.4, size: 3.5, grav: 2 });
         SFX.play('boss');

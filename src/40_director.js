@@ -462,8 +462,6 @@ const Waves = (() => {
     done() { return !api._queue || api._s !== S || api._queue.length === 0; },
     /** Heroes that have not spawned yet this wave. */
     remaining() { return api._queue && api._s === S ? api._left : 0; },
-    /** Seconds until the next party enters (0 if none are left). */
-    nextIn() { return api._queue && api._s === S && api._queue.length ? Math.max(0, api._timer) : 0; },
   };
   return api;
 })();
@@ -622,7 +620,6 @@ const Powers = (() => {
   const refusals = {};
   const refuse = reason => refusals[reason] || (refusals[reason] = Object.freeze({ ok: false, reason }));
 
-  const fearImmune = h => !!(HERO_CLASSES[h.type] && HERO_CLASSES[h.type].fearImmune) || !!h.boss;
   const hasPoint = (x, y) => Number.isFinite(x) && Number.isFinite(y);
   /** Any living hero within r of (x, y)? (no allocation) */
   function heroNear(x, y, r) {
@@ -714,7 +711,7 @@ const Powers = (() => {
         case 'fear': {
           const h = Spatial.nearestHero(wx, wy, FEAR_PICK);
           if (!h) return refuse('Pick a hero');
-          if (fearImmune(h)) return refuse('Immune to fear');
+          if (Status.fearImmune(h)) return refuse('Immune to fear');
           if (h.st.fearT > 1) return refuse('Already terrified');
           return OK;
         }
@@ -770,7 +767,7 @@ const Powers = (() => {
     _fear(wx, wy) {
       const h = Spatial.nearestHero(wx, wy, FEAR_PICK);
       if (!h) { api.lastReason = 'Pick a hero'; return false; }
-      if (fearImmune(h) || !Status.apply(h, 'fear', { dur: POWERS.fear.dur, x: h.x, y: h.y })) {
+      if (Status.fearImmune(h) || !Status.apply(h, 'fear', { dur: POWERS.fear.dur, x: h.x, y: h.y })) {
         api.lastReason = 'Immune to fear';
         return false;
       }

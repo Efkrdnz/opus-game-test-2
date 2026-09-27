@@ -527,12 +527,19 @@ const Lures = {
   list() {
     const out = [];
     for (const s of S.structs) {
-      if (s.cat === 'object' && s.id === 'chest' && !s.broken && !s.data.empty && !s.data.claimedBy) out.push({ x: s.x, y: s.y, kind: 'chest', struct: s });
+      if (s.cat !== 'object' || s.id !== 'chest' || s.broken || s.data.empty) continue;
+      if (s.data.claimedBy && !this.claimantAlive(s.data.claimedBy)) s.data.claimedBy = null; // claimant died/fled
+      if (!s.data.claimedBy) out.push({ x: s.x, y: s.y, kind: 'chest', struct: s });
     }
     for (const m of S.monsters) {
       if (!m.dead && m.disguised) out.push({ x: Math.floor(m.x), y: Math.floor(m.y), kind: 'mimic', ent: m });
     }
     return out;
+  },
+  /** Is the hero with this uid still alive in the dungeon? */
+  claimantAlive(uid) {
+    for (const h of S.heroes) if (h.uid === uid) return !h.dead && !h.escaped && !h.removed;
+    return false;
   },
   radius() {
     let r = CFG.lureRadius;

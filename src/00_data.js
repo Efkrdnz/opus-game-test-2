@@ -384,7 +384,7 @@ const POWERS = {
   },
   fear: {
     name: 'Fear', key: 'W', icon: '😱', mana: 25, cd: 2, target: 'hero', dur: 4,
-    desc: 'Terrify one hero: they flee toward the entrance for 4s. Paladins are immune.',
+    desc: 'Terrify one hero: they flee toward the entrance for 4s (and may leave the dungeon). Paladins and hero bosses are immune.',
   },
   lightning: {
     name: 'Lightning Strike', key: 'E', icon: '⚡', mana: 40, cd: 3, target: 'tile', dmg: 65, radius: 1.25, stun: 0.6,

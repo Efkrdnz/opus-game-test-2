@@ -32,7 +32,7 @@ if (missing.length) {
     blocks[name] = chunk.slice(chunk.indexOf('\n') + 1);
   }
   const stubCode = missing.map(m => `/* ---- DEV STUB: ${m} ---- */\n` + blocks[m]).join('\n');
-  // Stubs go before 90_game.js so they're defined in the same way real modules are.
+  // Stubs are appended; order doesn't matter because modules are only used at runtime (after load).
   js = js + '\n\n' + stubCode;
 }
 

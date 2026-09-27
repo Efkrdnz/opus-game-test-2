@@ -62,7 +62,9 @@ const Heroes = (() => {
     rushDist: 6, rushExit: 9,        // Path.heartDist hysteresis for the final rush
     retreatPct: 0.3, recoverPct: 0.65, retreatMinDist: 6,
     healerSeekR: 8,                  // retreating heroes fall back to a Cleric this close…
-    tendR: 7, tendMax: 15,           // …who holds position (≤ tendMax s) while they come to it
+    tendR: 7, tendMax: 15,           // …who holds position (≤ tendMax s) while they come to it,
+    tendHardMax: 45,                 // (longer while actually treating them, never beyond this)
+    healStall: 6,                    // a patient whose HP hasn't risen for this long stops waiting
     heartReach: 1.3, heartReachRanged: 2.5,
     heartCrowdReach: 2.8,            // mobbed Heart: strike over allies' shoulders from this close
     slotSeekR: 3.5,                  // stalled this close to the Heart → walk round to a free side
@@ -1414,7 +1416,7 @@ const Heroes = (() => {
       healT: Math.random() * (c.healCd || 2), blastT: randRange(2, 5), lohUsed: false,
       disarmOk: new Set(), disarmFail: new Set(), abilityRetry: 0,
       // cohesion (and clerics tending the wounded)
-      waitT: 0, waitCd: 0, tendT: 0, tending: false, byHealer: false,
+      waitT: 0, waitCd: 0, tendT: 0, tending: false, byHealer: false, healHp: 0, healWaitT: 0,
       // movement bookkeeping
       sx: 0, sy: 0, queueT: 0, pushT: 0, crowdT: 0, slot: null, tickX: h.x, tickY: h.y, netMove: 0,
       stuckWin: 0, stuckAcc: 0, stuckN: 0, lastPX: h.x, lastPY: h.y,
@@ -1475,11 +1477,13 @@ const Heroes = (() => {
       const dx = o.x - h.x, dy = o.y - h.y, d2 = dx * dx + dy * dy;
       if (d2 > K.tendR * K.tendR) continue;
       need = true;
-      if (d2 <= 4 && o.hp < K.recoverPct * o.maxHp) treating = true;   // patient at our side, still hurt
+      // patient at our side, still hurt, and we can actually reach it with a heal
+      if (d2 <= 4 && o.hp < K.recoverPct * o.maxHp && Grid.los(h.x, h.y, o.x, o.y)) treating = true;
     }
     if (!need) { ai.tendT = 0; return false; }
     ai.tendT += dt;
-    return ai.tendT < K.tendMax || treating;   // the cap only applies while the patient is still coming
+    // The soft cap only applies while the patient is still coming; never beyond the hard cap.
+    return ai.tendT < K.tendHardMax && (ai.tendT < K.tendMax || treating);
   }
 
   /** A party member that is marching with the group (not fleeing, retreating, escaping or rushing). */
@@ -1537,7 +1541,13 @@ const Heroes = (() => {
         const hl = ai.healer;
         if (hl && alive(hl)) {
           // Standing by the healer (not "anchored": allies can jostle past a field hospital).
-          if (dist(h.x, h.y, hl.x, hl.y) <= 1.3) { ai.byHealer = true; faceToward(h, hl.x); opportunistic(h, c); return; }
+          if (dist(h.x, h.y, hl.x, hl.y) <= 1.3 && Grid.los(h.x, h.y, hl.x, hl.y)) {
+            // Being treated: stay while our HP keeps rising; if it stalls (healer busy
+            // elsewhere, can't reach us…) give up on healers and head out.
+            if (h.hp > ai.healHp + 0.5) { ai.healHp = h.hp; ai.healWaitT = 0; } else ai.healWaitT += dt;
+            if (ai.healWaitT > K.healStall) { ai.healer = null; ai.noHealer = true; }
+            else { ai.byHealer = true; faceToward(h, hl.x); opportunistic(h, c); return; }
+          } else { ai.healHp = h.hp; ai.healWaitT = 0; }
           setGoal(h, Math.floor(hl.x), Math.floor(hl.y), 'healer', true);
           follow(h, speedOf(h, 1), dt, 'exit');
           opportunistic(h, c);

@@ -9,6 +9,8 @@
  *               Mimic ambushes from its chest disguise.
  *    Bosses     Minotaur Charge · Lich Raise Dead (+ shadow bolts) · Dragon Fire Breath.
  *    Extras     summon() for Necromancy / Legion / Lich / lairs, alarm() for runes.
+ *    Upkeep     a slain placed monster/boss (skeletons excepted) breaks its post at wave end and
+ *               stays down until the player repairs it (core Build.repair → revive()).
  *
  *  Walkers treat walls, rock, standing barricades and the Heart tile as solid
  *  (only the Wraith phases through); sight and projectiles pass over barricades.
@@ -1170,6 +1172,27 @@ const Monsters = (() => {
     if (m.isBoss) m.abilityT = 2;
   }
 
+  /**
+   * A slain placed monster/boss at wave end: its post breaks and it stays down (remains drawn at
+   * the post) until the player pays to repair it — the monster counterpart of repairing traps.
+   */
+  function layToRest(m) {
+    m.post.broken = true;
+    m.dead = true; m.hp = 0; m.deadT = Math.max(m.deadT || 0, 1); m.respawnT = 0;
+    m.homeX = m.post.x + 0.5; m.homeY = m.post.y + 0.5;
+    m.x = m.homeX; m.y = m.homeY;
+    Object.assign(m.st, makeStatus());
+    m.state = 'idle'; m.target = null; m.path = null; m.disguised = false; m.animT = 0; m.flashT = 0;
+    if (m.ai) { m.ai.corpses.length = 0; m.ai.phase = 0; m.ai.recoverT = 0; m.ai.alarmT = 0; }
+  }
+  const postDown = m => !!m.post && !!m.post.broken;
+  /** Cost to repair a slain monster's post (core rule), or null if none applies. */
+  function reviveCost(m) {
+    if (!m.post || !m.post.broken || typeof Build === 'undefined' || !Build.repairCost) return null;
+    return Build.repairCost(m.post);
+  }
+  const costText = c => (c ? c + 'g' : 'free');
+
   /* ---------------------------------------------------------------------------
    * 12. TOOLTIP TEXT
    * ------------------------------------------------------------------------ */
@@ -1288,17 +1311,42 @@ const Monsters = (() => {
       }
     },
 
-    /** All placed monsters alive, healed and at their posts; bosses ready in 2 s; mimics disguised. */
+    /** Placed monsters alive, healed and at their posts; bosses ready in 2 s; mimics disguised. Broken posts stay down. */
     onWaveStart() {
       S.monsters = S.monsters.filter(m => !m.temp && !m.removed);
-      for (const m of S.monsters) resetForWave(m);
+      for (const m of S.monsters) {
+        if (postDown(m)) { if (!m.dead) layToRest(m); continue; }
+        resetForWave(m);
+      }
     },
 
-    /** Remove this wave's summons; revive and heal placed monsters at their posts. */
+    /**
+     * Remove this wave's summons. Survivors heal and return to their posts; skeletons always
+     * reassemble; any other slain placed monster or boss breaks its post and stays dead until repaired.
+     */
     onWaveEnd() {
       for (const m of S.monsters) if (m.temp) m.removed = true;
       S.monsters = S.monsters.filter(m => !m.removed);
-      for (const m of S.monsters) resetForWave(m);
+      for (const m of S.monsters) {
+        if (m.post && (m.dead || m.post.broken) && m.type !== 'skeleton') layToRest(m);
+        else resetForWave(m);
+      }
+    },
+
+    /**
+     * Bring a broken post's monster back: alive, full HP, at its post, statuses cleared, stats
+     * refreshed (called by core Build._fix when the player repairs the post). Accepts entity or Structure.
+     */
+    revive(x) {
+      const m = entOf(x);
+      if (!m || m.removed) return false;
+      if (m.post) m.post.broken = false;
+      resetForWave(m);
+      FX.burst(m.x, m.y, { n: 18, colors: m.isBoss ? (BOSS_FX[m.type] || PAL.heal) : PAL.heal, speed: 2, life: 0.7, size: 2.4, grav: -2 });
+      FX.ring(m.x, m.y, { color: '#9fe8ff', r0: 0.2, r1: m.isBoss ? 1.6 : 1.1, life: 0.5, width: 2 });
+      FX.text(m.x, m.y - (m.isBoss ? 1.2 : 0.85), m.isBoss ? `${defOf(m.type).name} rises again!` : 'Revived!', '#9fe8ff', { size: m.isBoss ? 12 : 10 });
+      if (m.isBoss) SFX.play('roar');
+      return true;
     },
 
     /** Called by core Combat.kill: skeleton reassembly timer, boss death fanfare. */
@@ -1321,7 +1369,7 @@ const Monsters = (() => {
         FX.ring(m.x, m.y, { color: '#ff5a5a', r0: 0.4, r1: 4, life: 0.9, width: 5 });
         FX.text(m.x, m.y - 1.3, `${name} falls!`, '#ff5a5a', { size: 15, life: 1.6 });
         SFX.play('boss');
-        if (typeof UI !== 'undefined' && UI.toast) UI.toast(`Your ${name} was slain${by}! It will rise again after the wave.`, 'bad');
+        if (typeof UI !== 'undefined' && UI.toast) UI.toast(`Your ${name} was slain${by}! Repair its lair after the wave to raise it again.`, 'bad');
       }
     },
 
@@ -1352,7 +1400,13 @@ const Monsters = (() => {
     stateLabel(x) {
       const m = entOf(x);
       if (!m) return '';
-      if (m.dead) return m.respawnT > 0 ? `Reassembling (${Math.ceil(m.respawnT)}s)` : 'Slain';
+      if (m.dead) {
+        if (m.respawnT > 0) return `Reassembling (${Math.ceil(m.respawnT)}s)`;
+        if (!m.post || m.temp) return 'Slain';
+        const c = reviveCost(m);
+        if (c !== null && S.phase !== 'wave') return `Slain — repair to revive (${costText(c)})`;
+        return m.type === 'skeleton' ? 'Slain' : 'Slain — repair its post after the wave';
+      }
       if (m.disguised) return 'Disguised as a chest';
       if (S.phase !== 'wave') return 'Guarding its post';
       const ai = m.ai || {};
@@ -1384,6 +1438,11 @@ const Monsters = (() => {
       const k = m ? calcStats(m.type, m.level) : x && x.id ? calcStats(x.id, x.level) : null;
       if (!k) return [];
       const out = [];
+      if (m && m.dead && m.post && !m.temp && m.respawnT <= 0) {
+        const c = reviveCost(m);
+        if (c !== null && S.phase !== 'wave') out.push(`Slain — repair to revive (${costText(c)})`);
+        else if (m.type !== 'skeleton') out.push('Slain — its post must be repaired after the wave');
+      }
       if (m) out.push(`HP: ${Math.ceil(m.hp)} / ${m.maxHp}`); else out.push(`HP: ${k.hp}`);
       out.push(`Damage: ${Math.round(k.dmg)} every ${k.atkCd}s (${k.dps} DPS)`);
       out.push(`${k.ranged ? 'Range' : 'Reach'}: ${k.range} · Speed: ${k.speed}`);

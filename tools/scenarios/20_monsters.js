@@ -28,15 +28,22 @@
     H.assert(t2 >= 3 && t2 <= 5.5, 'bone yard ~4s (took ' + t2 + ')');
   });
 
-  add('monster: non-skeletons stay dead until wave end, then revive', H => {
-    const m = H.place('monster', 'orc', 8, 3).ent;
+  add('monster: non-skeletons stay dead until their post is repaired', H => {
+    const s = H.place('monster', 'orc', 8, 3), m = s.ent;
     H.startWave(); H.keepAlive();
     H.DH.Combat.damage(m, 9999, { team: 'hero', kind: 'hero', id: 'warrior' });
     H.step(15);
     H.assert(m.dead, 'orc stays dead during the wave');
     H.DH.Game.endWave();
-    H.assert(!m.dead && m.hp === m.maxHp, 'revived at wave end');
+    H.assert(m.dead && s.broken, 'post broken after the wave (no free revival)');
     H.assert(H.S.monsters.includes(m), 'still registered');
+    H.DH.Game.pickPerk(null);
+    H.assert(H.S.phase === 'build', 'back in the build phase');
+    const cost = H.DH.Build.repairCost(s), gold = H.S.gold;
+    H.assert(cost === Math.ceil(s.spent * CFG.repairRate), 'repair costs 30% of the gold invested (' + cost + ')');
+    H.assert(H.DH.Build.repair(8, 3), 'Build.repair succeeds');
+    H.assert(!m.dead && m.hp === m.maxHp && !s.broken && H.S.gold === gold - cost, 'revived at full HP for the repair cost');
+    H.assert(m.x === 8.5 && m.y === 3.5, 'back at its post');
   });
 
   add('monster: spider webs slow heroes', H => {

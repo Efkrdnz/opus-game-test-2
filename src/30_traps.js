@@ -500,7 +500,7 @@ const Traps = (() => {
     let n = 0;
     for (let k = firstOn(x, y); k >= 0; k = occ.next[k]) {
       const h = occ.list[k];
-      if (!liveOn(h, x, y) || NO_TELEPORT[h.state] || h.st.fearT > 0) continue;
+      if (!liveOn(h, x, y) || NO_TELEPORT[h.state] || h.leaving || h.st.fearT > 0) continue;
       sendToEntrance(h);
       n++;
     }

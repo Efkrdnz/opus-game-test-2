@@ -10,7 +10,10 @@
  *  Private per-hero brain state lives in `h.ai` (no other module reads it).
  *  Documented hero fields other modules read: name, elite, boss, party, leader,
  *  state, loot, lure, channel {kind,t,max} (t counts UP from 0 to max),
- *  abilityT, abilityCd, heartDmg, target, face, animT, path, pathIdx.
+ *  abilityT, abilityCd, heartDmg, target, face, animT, path, pathIdx, and
+ *  leaving (true while retreating / escaping with loot / giving up — heading OUT,
+ *  independent of transient states like 'stunned' or 'fight'; Traps' teleporter
+ *  skips such heroes).
  *
  *  Sections
  *    1. Tuning              6. Pathing               11. Channels
@@ -82,7 +85,7 @@ const Heroes = (() => {
     lureEvery: 0.5, lureMaxPath: 3,  // lure path may be at most radius × this long
     lootTime: 1.2, lootReach: 1.05, lureTimeout: 20,
     // Kits
-    detectEvery: 1, revealEvery: 0.25, lohRange: 4,
+    detectEvery: 0.25, revealEvery: 0.25, lohRange: 4,   // (detect is a per-SECOND chance)
     // Hero bosses
     bashR: 1.8, bashMul: 2.5, bashStun: 2,
     blinkR: 4, blinkMinGain: 3,
@@ -320,12 +323,19 @@ const Heroes = (() => {
     prepCost(h, ai.gk);
     let p = Path.astar(h.x, h.y, ai.gx, ai.gy, ai.cost);
     if (!p && ai.cDig !== 1) {
-      // Sealed in (e.g. by a Collapse around us): claw through rubble, or failing
-      // that hack through player walls (never rock) — a hero can always get out.
-      ai.cDig = 2; ai.cDigCost = K.rubbleCost;
-      p = Path.astar(h.x, h.y, ai.gx, ai.gy, ai.cost);
-      if (!p) { ai.cDig = 3; p = Path.astar(h.x, h.y, ai.gx, ai.gy, ai.cost); }
-      if (!p) ai.cDig = 0;
+      if (dropUnreachableGoal(h)) {
+        // A monster / chest / healer / Heart-side slot we can't reach (sealed pocket): give it up.
+        ai.pathVer = S.pathVersion; ai.dangerVer = S.dangerVersion; ai.trapVer = trapVer; ai.lastRepath = S.time;
+        return true;
+      }
+      if (!isFinite(Path.heartDist(h.x, h.y))) {
+        // WE are sealed in (e.g. by a Collapse around us): claw through rubble, or failing
+        // that hack through player walls (never rock) — a hero can always get out.
+        ai.cDig = 2; ai.cDigCost = K.rubbleCost;
+        p = Path.astar(h.x, h.y, ai.gx, ai.gy, ai.cost);
+        if (!p) { ai.cDig = 3; p = Path.astar(h.x, h.y, ai.gx, ai.gy, ai.cost); }
+        if (!p) ai.cDig = 0;
+      }
     }
     ai.pathVer = S.pathVersion; ai.dangerVer = S.dangerVersion; ai.trapVer = trapVer;
     ai.lastRepath = S.time;
@@ -346,6 +356,25 @@ const Heroes = (() => {
     h.path = p || [];
     h.pathIdx = 0;
     ai.noPath = !p;
+    return true;
+  }
+
+  /**
+   * A moving/side goal (monster to chase, lure, healer, Heart-side slot) that has no
+   * route at all — it sits in a sealed pocket. Give it up rather than tunnel to it.
+   * @returns true if the goal was dropped.
+   */
+  function dropUnreachableGoal(h) {
+    const ai = h.ai;
+    switch (ai.gk) {
+      case 'fight': if (ai.engage) { ignoreMonster(h, ai.engage, K.noDmgIgnore); clearEngage(h); } break;
+      case 'lure': releaseLure(h); break;
+      case 'healer': ai.healer = null; ai.noHealer = true; break;
+      case 'slot': ai.slot = null; break;
+      default: return false;
+    }
+    ai.gk = ''; ai.noPath = false;
+    h.path = null; ai.repathT = 0;
     return true;
   }
 
@@ -406,7 +435,7 @@ const Heroes = (() => {
       for (let dy = -r; dy <= r; dy++) for (let dx = -r; dx <= r; dx++) {
         if (Math.max(Math.abs(dx), Math.abs(dy)) !== r) continue;
         const x = tx + dx, y = ty + dy;
-        if (Grid.isSolid(x, y) || Grid.barricadeAt(x, y)) continue;
+        if (Grid.isSolid(x, y) || Grid.barricadeAt(x, y) || (x === S.heart.x && y === S.heart.y)) continue;
         const d = dist(h.x, h.y, x + 0.5, y + 0.5);
         if (d < bd) { bd = d; bx = x; by = y; }
       }
@@ -598,7 +627,7 @@ const Heroes = (() => {
    */
   function watchdog(h, dt) {
     const ai = h.ai;
-    if (ai.engage || h.channel || ai.atHeart || ai.smash) { ai.wdT = 0; ai.wdX = h.x; ai.wdY = h.y; return; }
+    if (ai.engage || h.channel || ai.atHeart || ai.smash || ai.tending || ai.byHealer) { ai.wdT = 0; ai.wdX = h.x; ai.wdY = h.y; return; }
     if ((ai.wdT += dt) < K.watchdogWindow) return;
     const moved = Math.hypot(h.x - ai.wdX, h.y - ai.wdY);
     ai.wdT = 0; ai.wdX = h.x; ai.wdY = h.y;
@@ -1040,7 +1069,8 @@ const Heroes = (() => {
     const mode = h.ai.cDig, rubble = Grid.tile(x, y).rubble;
     const time = mode === 1 ? digTimeOf(h) : rubble ? K.rubbleDigTime : K.sealedDigTime;
     startChannel(h, 'dig', time * (mode !== 1 && hasPerk('reinforced') ? 2 : 1), x, y, null);
-    h.channel.rubble = mode !== 1;          // "clawing out" rather than a miner's tunnel
+    h.channel.rubble = mode !== 1;          // sealed in and getting out, not a miner's tunnel…
+    h.channel.hack = mode !== 1 && !rubble; // …through a player wall rather than rubble
   }
 
   /** Rogue: known armed trap on the next tile → roll once; success = channel a disarm. */
@@ -1093,9 +1123,14 @@ const Heroes = (() => {
     return null;
   }
 
-  /** Rogue: each second, a chance to spot each hidden trap nearby. */
+  /**
+   * Rogue: a chance to spot each hidden trap nearby. cls.detect is per second; it is
+   * sampled every detectEvery s at the equivalent per-check chance (a rogue crosses
+   * the detection radius in well under a second).
+   */
   function rogueDetect(h, c) {
-    const p = (c.detect || 0) * (hasPerk('hidden_depths') ? 0.5 : 1);
+    const perSec = clamp((c.detect || 0) * (hasPerk('hidden_depths') ? 0.5 : 1), 0, 1);
+    const p = 1 - Math.pow(1 - perSec, K.detectEvery);
     const r2 = (c.detectR || 2) * (c.detectR || 2);
     for (const s of S.structs) {
       if (s.cat !== 'trap' || !s.hidden || s.revealed || s.broken || s.disarmed) continue;
@@ -1184,10 +1219,15 @@ const Heroes = (() => {
     return best;
   }
 
-  /** A Cleric that can tend to us: alive, not fleeing/leaving itself, within r. */
+  /**
+   * A Cleric that can tend to us: alive, within r, not fleeing/leaving, not rushing or
+   * at the Heart, and never deeper in the dungeon than we are (by > 3 steps) — a
+   * retreating hero must not follow a healer toward the Heart.
+   */
   function healerUsable(h, o, r) {
     if (!o || o.type !== 'cleric' || !alive(o) || !o.ai) return false;
-    if (o.ai.retreating || o.ai.escaping || o.ai.gaveUp || o.st.fearT > 0) return false;
+    if (o.ai.retreating || o.ai.escaping || o.ai.gaveUp || o.ai.rushing || o.ai.atHeart || o.st.fearT > 0) return false;
+    if (!(o.ai.hd >= h.ai.hd - 3)) return false;
     const dx = o.x - h.x, dy = o.y - h.y;
     return dx * dx + dy * dy <= r * r;
   }
@@ -1374,7 +1414,7 @@ const Heroes = (() => {
       healT: Math.random() * (c.healCd || 2), blastT: randRange(2, 5), lohUsed: false,
       disarmOk: new Set(), disarmFail: new Set(), abilityRetry: 0,
       // cohesion (and clerics tending the wounded)
-      waitT: 0, waitCd: 0, tendT: 0, tending: false,
+      waitT: 0, waitCd: 0, tendT: 0, tending: false, byHealer: false,
       // movement bookkeeping
       sx: 0, sy: 0, queueT: 0, pushT: 0, crowdT: 0, slot: null, tickX: h.x, tickY: h.y, netMove: 0,
       stuckWin: 0, stuckAcc: 0, stuckN: 0, lastPX: h.x, lastPY: h.y,
@@ -1412,7 +1452,7 @@ const Heroes = (() => {
         releaseLure(h);
         cancelChannel(h);
         if (ai.engage && ai.engageKind !== 'block' && ai.engageKind !== 'taunt') clearEngage(h);
-        ai.healerT = 0; ai.healer = null; ai.healerLost = false;
+        ai.healerT = 0; ai.healer = null; ai.healerLost = false; ai.noHealer = false;
         h.path = null; ai.repathT = 0;
         FX.text(h.x, h.y - 1, 'Fall back!', '#ffd0a0', { size: 10 });
       }
@@ -1429,15 +1469,17 @@ const Heroes = (() => {
    */
   function tendWounded(h, dt) {
     const ai = h.ai;
-    let need = false;
+    let need = false, treating = false;
     for (const o of S.heroes) {
       if (o === h || !alive(o) || !o.ai || !o.ai.retreating || o.ai.healer !== h) continue;
-      const dx = o.x - h.x, dy = o.y - h.y;
-      if (dx * dx + dy * dy <= K.tendR * K.tendR) { need = true; break; }
+      const dx = o.x - h.x, dy = o.y - h.y, d2 = dx * dx + dy * dy;
+      if (d2 > K.tendR * K.tendR) continue;
+      need = true;
+      if (d2 <= 4 && o.hp < K.recoverPct * o.maxHp) treating = true;   // patient at our side, still hurt
     }
     if (!need) { ai.tendT = 0; return false; }
     ai.tendT += dt;
-    return ai.tendT < K.tendMax;
+    return ai.tendT < K.tendMax || treating;   // the cap only applies while the patient is still coming
   }
 
   /** A party member that is marching with the group (not fleeing, retreating, escaping or rushing). */
@@ -1495,7 +1537,7 @@ const Heroes = (() => {
         const hl = ai.healer;
         if (hl && alive(hl)) {
           // Standing by the healer (not "anchored": allies can jostle past a field hospital).
-          if (dist(h.x, h.y, hl.x, hl.y) <= 1.3) { faceToward(h, hl.x); opportunistic(h, c); return; }
+          if (dist(h.x, h.y, hl.x, hl.y) <= 1.3) { ai.byHealer = true; faceToward(h, hl.x); opportunistic(h, c); return; }
           setGoal(h, Math.floor(hl.x), Math.floor(hl.y), 'healer', true);
           follow(h, speedOf(h, 1), dt, 'exit');
           opportunistic(h, c);
@@ -1598,13 +1640,14 @@ const Heroes = (() => {
     if ((ai.slipT -= dt) <= 0) { ai.slipT = K.slipEvery; ai.slip = chance(K.slipChance); }
     if (ai.plainT > 0) ai.plainT -= dt;
     if (h.boss && h.abilityT > 0) h.abilityT = Math.max(0, h.abilityT - dt);
-    ai.anchored = false; ai.wantMove = false; ai.waiting = false; ai.tending = false; ai.charging = false; ai.smash = null;
+    ai.anchored = false; ai.wantMove = false; ai.waiting = false; ai.tending = false; ai.byHealer = false; ai.charging = false; ai.smash = null;
     h.moving = false;
     ai.netMove = Math.hypot(h.x - ai.tickX, h.y - ai.tickY);   // last step's net motion (incl. shoves)
     ai.tickX = h.x; ai.tickY = h.y;
     if (ai.netMove > 2 && onEntrance(h) && S.time - ai.blinkT > 0.1) onTeleported(h);
     ensureOpen(h);
     ai.hd = Path.heartDist(h.x, h.y);
+    h.leaving = !!(ai.retreating || ai.escaping || ai.gaveUp);
 
     // ---- incapacitated / terrified
     if (st.stunT > 0) { cancelChannel(h); ai.anchored = true; h.state = 'stunned'; return; }
@@ -1623,7 +1666,11 @@ const Heroes = (() => {
     else if (ai.atHeart) heartTick(h, c);
     else moveTick(h, c, dt);
 
-    if (alive(h)) { h.state = deriveState(h); stuckCheck(h, dt); stallCheck(h, dt); watchdog(h, dt); }
+    if (alive(h)) {
+      h.state = deriveState(h);
+      h.leaving = !!(ai.retreating || ai.escaping || ai.gaveUp);
+      stuckCheck(h, dt); stallCheck(h, dt); watchdog(h, dt);
+    }
   }
 
   function promote(p) {
@@ -1651,15 +1698,10 @@ const Heroes = (() => {
     if (bossId) cls = HERO_BOSSES[bossId].base;
     if (!HERO_CLASSES[cls]) cls = 'warrior';
     const c = HERO_CLASSES[cls];
-    const w = Math.max(1, S.wave || 1);
-    // Wave scaling: core's heroWaveScale (linear + gentle compounding, shared with the UI preview).
-    const sc = typeof heroWaveScale === 'function' ? heroWaveScale(w)
-      : { hp: 1 + CFG.heroHpPerWave * (w - 1), dmg: 1 + CFG.heroDmgPerWave * (w - 1) };
-    let hpM = sc.hp, dmgM = sc.dmg, spdM = 1;
     const elite = !!opts.elite;
-    if (elite) { hpM *= CFG.eliteHpMul; dmgM *= CFG.eliteDmgMul; spdM *= CFG.eliteSpeedMul; }
-    if (bossId) { const b = HERO_BOSSES[bossId]; hpM *= b.hpMul; dmgM *= b.dmgMul; spdM *= b.speedMul; }
-    if (hasPerk('midas')) hpM *= 1.2;
+    // Core's single source of truth (wave scaling, elite, hero boss, Midas) — shared with the UI preview.
+    const mul = heroStatMuls({ elite, boss: bossId }, Math.max(1, S.wave || 1));
+    const hpM = mul.hp, dmgM = mul.dmg, spdM = mul.spd;
     const h = makeEntity('hero', cls, S.entrance.x + 0.5, S.entrance.y + 0.5);
     h.maxHp = h.hp = Math.max(1, Math.round(c.hp * hpM));
     h.dmg = c.dmg * dmgM;
@@ -1682,6 +1724,7 @@ const Heroes = (() => {
     h.abilityT = bossId ? h.abilityCd * 0.5 : 0;
     h.abilityName = bossId ? HERO_BOSSES[bossId].ability : null;
     h.escaped = false;
+    h.leaving = false;
     h.moving = false;
     h.smart = heroSmartness(h.elite);
     initAI(h);
@@ -1752,13 +1795,14 @@ const Heroes = (() => {
 
   /**
    * Paladin's Lay on Hands: a living Paladin within 4 tiles that hasn't used it
-   * this wave saves the dying hero (itself included) at lohPct × maxHp.
+   * this wave saves a dying ALLY (never itself) at lohPct × maxHp.
    * @returns true if the death was prevented.
    */
   function preventDeath(h) {
     if (!S || !h || h.team !== 'hero' || h.dead) return false;
     let best = null, bd = K.lohRange * K.lohRange;
     for (const p of S.heroes) {
+      if (p === h) continue;                                  // Lay on Hands saves allies, not the Paladin
       if (p.type !== 'paladin' || !alive(p) || !p.ai || p.ai.lohUsed) continue;
       const dx = p.x - h.x, dy = p.y - h.y, d2 = dx * dx + dy * dy;
       if (d2 <= bd) { bd = d2; best = p; }
@@ -1767,7 +1811,7 @@ const Heroes = (() => {
     best.ai.lohUsed = true;
     h.hp = Math.max(1, Math.round(h.maxHp * (HERO_CLASSES.paladin.lohPct || 0.5)));
     h.st.burnT = 0; h.st.bleedT = 0;   // the saved hero is also purged of lingering wounds
-    if (best !== h) FX.beam(best.x, best.y - 0.4, h.x, h.y - 0.2, { color: '#ffe680', width: 4, life: 0.5 });
+    FX.beam(best.x, best.y - 0.4, h.x, h.y - 0.2, { color: '#ffe680', width: 4, life: 0.5 });
     FX.ring(h.x, h.y, { color: '#ffe680', r0: 0.2, r1: 1.4, life: 0.6, width: 4 });
     FX.burst(h.x, h.y - 0.2, { n: 24, colors: ['#ffe680', '#ffffff', '#fff3a0'], speed: 2.4, life: 0.8, size: 2.5, grav: -3, glow: true });
     FX.text(h.x, h.y - 1.2, 'Lay on Hands!', '#ffe680', { size: 12 });
@@ -1800,7 +1844,9 @@ const Heroes = (() => {
       case 'retreat':
         if (ai.gaveUp) return 'Giving up on this cursed maze';
         return ai.healer && alive(ai.healer) ? 'Falling back to the healer' : 'Retreating to the exit';
-      case 'dig': return h.channel && h.channel.rubble ? 'Clawing through rubble' : 'Digging through a wall';
+      case 'dig':
+        if (h.channel && h.channel.hack) return 'Hacking through a wall';
+        return h.channel && h.channel.rubble ? 'Clawing through rubble' : 'Digging through a wall';
       case 'disarm': return h.channel && h.channel.jam ? 'Jamming the teleporter' : LABELS.disarm;
       case 'rush': return ai.smash ? 'Smashing a barricade' : LABELS.rush;
       default:

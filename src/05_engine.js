@@ -810,7 +810,7 @@ const Combat = {
         if (S.ws) S.ws.trapKills[trapId] = (S.ws.trapKills[trapId] || 0) + 1;
       }
       Danger.add(tx, ty, 6, 2);
-      S.corpses.push({ x: t.x, y: t.y, type: t.type, t: CFG.corpseLife, uid: t.uid });
+      S.corpses.push({ x: t.x, y: t.y, type: t.type, t: CFG.corpseLife, uid: t.uid, face: t.face || 1, boss: t.boss || null });
       if (hasPerk('necromancy') && !t.boss && Math.random() < 0.25) {
         const m = Monsters.summon('skeleton', t.x, t.y, { temp: true, risen: true });
         if (m) FX.text(t.x, t.y - 1, 'Risen!', '#bb88ff', { size: 11 });

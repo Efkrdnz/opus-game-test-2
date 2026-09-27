@@ -48,6 +48,15 @@ const FX = {
   /** Floating text (damage numbers, gold, callouts). o: {size, vy, life} */
   text(x, y, str, color = '#fff', o = {}) {
     if (this.texts.length > 120) this.texts.shift();
+    // Lift the new text above any text that just appeared at the same spot, so simultaneous
+    // hits read as separate numbers (e.g. "10" and "3", not "103").
+    for (let pass = 0; pass < 6; pass++) {
+      let bumped = false;
+      for (const t of this.texts) {
+        if (t.max - t.life < 0.35 && Math.abs(t.x - x) < 0.7 && Math.abs(t.y - y) < 0.3) { y = t.y - 0.34; bumped = true; }
+      }
+      if (!bumped) break;
+    }
     const life = o.life ?? 0.9;
     this.texts.push({ x, y, vy: o.vy ?? -1.1, str: String(str), color, size: o.size ?? 11, life, max: life });
   },
@@ -69,6 +78,10 @@ const FX = {
   flash(color = '#fff', life = 0.2) { this.screenFlash = { color, life, max: life }; },
 
   update(dt) {
+    // Floating text and camera shake are for the player's eyes: at 2×/4× speed they advance at
+    // real-time pace (the sim runs several steps per frame), so numbers stay readable.
+    const k = (S && S.phase === 'wave' && S.speed > 1) ? 1 / S.speed : 1;
+    const dtr = dt * k;
     for (const p of this.parts) {
       p.life -= dt;
       p.vy += p.grav * dt;
@@ -77,7 +90,7 @@ const FX = {
       p.x += p.vx * dt; p.y += p.vy * dt;
     }
     this.parts = this.parts.filter(p => p.life > 0);
-    for (const t of this.texts) { t.life -= dt; t.y += t.vy * dt; t.vy *= Math.max(0, 1 - 1.8 * dt); }
+    for (const t of this.texts) { t.life -= dtr; t.y += t.vy * dtr; t.vy *= Math.max(0, 1 - 1.8 * dtr); }
     this.texts = this.texts.filter(t => t.life > 0);
     for (const r of this.rings) r.life -= dt;
     this.rings = this.rings.filter(r => r.life > 0);
@@ -89,7 +102,7 @@ const FX = {
     if (this.shakeMag > 0.05) {
       this.shakeX = (Math.random() * 2 - 1) * this.shakeMag;
       this.shakeY = (Math.random() * 2 - 1) * this.shakeMag;
-      this.shakeMag *= Math.max(0, 1 - 9 * dt);
+      this.shakeMag *= Math.max(0, 1 - 9 * dtr);
     } else { this.shakeMag = 0; this.shakeX = this.shakeY = 0; }
   },
 };

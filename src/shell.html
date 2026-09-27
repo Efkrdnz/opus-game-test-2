@@ -317,7 +317,7 @@ body.phase-wave #cards, body.phase-reward #cards, body.phase-gameover #cards { f
 }
 .insp-preview .ttl { width: 100%; font-size: .62rem; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; color: var(--good); }
 .diff b { color: #b6f0c4; } .diff i { font-style: normal; color: var(--text4); padding: 0 .1rem; }
-.insp-actions { display: grid; grid-template-columns: 1fr 1fr; gap: .3rem; }
+.insp-actions { display: grid; grid-template-columns: 1fr 1fr; gap: .3rem; padding: 0 .6rem .55rem; flex: none; }
 .insp-actions .btn { min-width: 0; padding: .2rem .35rem; font-size: .78rem; }
 .insp-actions .btn:last-child:nth-child(odd) { grid-column: 1 / -1; }
 .insp-hp { display: flex; align-items: center; gap: .4rem; font-size: .7rem; font-weight: 700; color: var(--text3); }
@@ -325,7 +325,7 @@ body.phase-wave #cards, body.phase-reward #cards, body.phase-gameover #cards { f
 .insp-hp .bar { height: .8rem; }
 .insp-hp.warn { color: var(--warn); }
 .lockline.goodline { color: var(--good); }
-#btnRepairAll { margin: 0 .6rem .6rem; width: auto; }
+#btnRepairAll { margin: 0 .6rem .6rem; width: auto; flex: none; }
 
 /* ---- 9. Board & centre -------------------------------------------------------------- */
 #boardWrap {
@@ -724,6 +724,7 @@ body.phase-title #secPerks { flex: 1 1 auto; max-height: none; }
   #cards { max-height: 26rem; }
   #secInspect, #secPerks, #secPreview { max-height: none; flex: none; }
   #previewBody { max-height: 30rem; }
+  body.phase-wave #secBuild { display: none; } /* nothing to build mid-wave: bring powers up */
   .sum-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .help-grid { grid-template-columns: 1fr; }
   .modal { align-items: flex-start; overflow-y: auto; }
@@ -787,6 +788,7 @@ body.phase-title #secPerks { flex: 1 1 auto; max-height: none; }
       <section id="secInspect" class="panel">
         <div class="panel-head"><h2>Inspector</h2><span class="head-note" id="inspNote"></span></div>
         <div id="inspBody" class="scroll"></div>
+        <div id="inspActions" class="insp-actions" hidden></div>
         <button class="btn btn-wide" id="btnRepairAll" hidden></button>
       </section>
     </aside>
@@ -844,10 +846,10 @@ body.phase-title #secPerks { flex: 1 1 auto; max-height: none; }
 </div>
 
 <!-- ======================= MODALS ======================= -->
-<div class="modal" id="mTitle"><div class="modal-card title-card" id="titleCard"></div></div>
-<div class="modal" id="mReward"><div class="modal-card reward-card" id="rewardCard"></div></div>
-<div class="modal" id="mOver"><div class="modal-card over-card" id="overCard"></div></div>
-<div class="modal" id="mHelp"><div class="modal-card help-card" id="helpCard"></div></div>
+<div class="modal" id="mTitle" role="dialog" aria-modal="true" aria-label="Dungeon Heart"><div class="modal-card title-card" id="titleCard"></div></div>
+<div class="modal" id="mReward" role="dialog" aria-modal="true" aria-label="Wave survived — choose a perk"><div class="modal-card reward-card" id="rewardCard"></div></div>
+<div class="modal" id="mOver" role="dialog" aria-modal="true" aria-label="Game over"><div class="modal-card over-card" id="overCard"></div></div>
+<div class="modal" id="mHelp" role="dialog" aria-modal="true" aria-label="How to play"><div class="modal-card help-card" id="helpCard"></div></div>
 
 <div id="tip" hidden></div>
 <!--GAME_SCRIPT-->

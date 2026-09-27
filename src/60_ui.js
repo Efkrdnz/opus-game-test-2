@@ -54,7 +54,9 @@ const UI = (() => {
     skeleton: 'Respawns', goblin: 'Fast', orc: 'Knockback', spider: 'Webs', imp: 'Ranged', wraith: 'Phasing',
     mimic: 'Lure', minotaur: 'Charge', lich: 'Raise Dead', dragon: 'Fire Breath',
   };
-  const STAT_SKIP = new Set(['cost', 'unlock', 'name', 'desc', 'place', 'hidden', 'oneUse', 'lure', 'undead', 'phasing', 'ranged', 'ability', 'abilityName']);
+  const STAT_SKIP = new Set(['cost', 'unlock', 'name', 'desc', 'place', 'hidden', 'oneUse', 'lure', 'undead', 'phasing', 'ranged', 'ability', 'abilityName', 'level', 'lvl', 'id', 'type']);
+  /** describe() lines that merely repeat an HP bar we already draw. */
+  const HP_LINE = /^\s*(hp|health)\s*[:\s]\s*\d/i;
   const MON_SCALED = new Set(['hp', 'dmg', 'ambushDmg', 'chargeDmg', 'breathDmg']);
 
   /* ---------------------------------------------------------------------------
@@ -241,7 +243,6 @@ const UI = (() => {
     hudT: 0,
     tab: BUILD_TABS[0].id,
     seen: new Set(),        // unlocked item keys the player has seen (for "NEW" markers)
-    unlockCount: -1,
     cardSig: '', previewSig: '', perkSig: '', gridKey: '',
     lastGold: null, lastHeart: null,
     drag: null,             // active left-drag placement {visited:Set, tx, ty, noGold}
@@ -511,7 +512,8 @@ const UI = (() => {
     if (m.abilityName) r.push([esc(m.abilityName), m.abilityT > 0 ? 'in ' + secs(Math.max(0.1, m.abilityT)) : '<span class="good">ready</span>']);
     if (m.respawnT > 0) r.push(['Reassembles', 'in ' + secs(m.respawnT)]);
     const lines = has(typeof Monsters !== 'undefined' ? Monsters : null, 'describe') ? safe(() => Monsters.describe(m), [], 'Monsters.describe') : [];
-    const lineHTML = Array.isArray(lines) && lines.length ? `<ul class="tt-lines">${lines.slice(0, 6).map(l => `<li>${esc(l)}</li>`).join('')}</ul>` : '';
+    const extra = Array.isArray(lines) ? lines.map(String).filter(l => !HP_LINE.test(l)) : [];
+    const lineHTML = extra.length ? `<ul class="tt-lines">${extra.slice(0, 6).map(l => `<li>${esc(l)}</li>`).join('')}</ul>` : '';
     const sub = `${pipsHTML(lvl)} Level ${lvl}${tags.length ? ' · ' + tags.join(' · ') : ''}`;
     return tipHead(structIcon(cat, m.type), esc(d.name), sub) + hpBar(m.hp, m.maxHp, 'fill-mon') + rows(r) + statusChips(m) + lineHTML;
   }
@@ -527,7 +529,8 @@ const UI = (() => {
     body += flagChips(s, lines);
     if (s.maxHp) body += hpBar(s.hp, s.maxHp, 'fill-prog');
     if ((s.cat === 'monster' || s.cat === 'boss') && s.ent && s.ent.dead) body += `<div class="tt-warn">${s.ent.respawnT > 0 ? 'Reassembling in ' + secs(s.ent.respawnT) : 'Slain — returns next wave'}</div>`;
-    if (lines.length) body += `<ul class="tt-lines">${lines.slice(0, 8).map(l => `<li>${esc(l)}</li>`).join('')}</ul>`;
+    const shown = s.maxHp ? lines.filter(l => !HP_LINE.test(l)) : lines;
+    if (shown.length) body += `<ul class="tt-lines">${shown.slice(0, 8).map(l => `<li>${esc(l)}</li>`).join('')}</ul>`;
     if (S.phase === 'build') body += `<div class="tt-foot">Sell for <b class="goldc">${fmtInt(Build.sellValue(s.x, s.y))}g</b> · right-click to sell · click to inspect</div>`;
     return body;
   }
@@ -731,7 +734,7 @@ const UI = (() => {
       case 'start': {
         if (S.phase !== 'build') return simpleTip('', 'Start Wave', 'Enter', 'Available during the build phase.');
         const nw = S.nextWave;
-        return simpleTip(px('sword'), 'Start Wave ' + S.wave, 'Enter', nw ? `Release ${nw.total} heroes in ${nw.parties.length} part${nw.parties.length === 1 ? 'y' : 'ies'}. You cannot build again until the wave ends.` : 'Begin the wave.');
+        return simpleTip(px('sword'), 'Start Wave ' + S.wave, 'Enter', nw ? `Release ${waveTotal(nw)} heroes in ${nw.parties.length} part${nw.parties.length === 1 ? 'y' : 'ies'}. You cannot build again until the wave ends.` : 'Begin the wave.');
       }
       case 'alive': return simpleTip(px('person'), 'Heroes in the dungeon', '', 'Living adventurers currently inside your halls.');
       case 'incoming': return simpleTip(px('clock'), 'Incoming', '', 'Heroes of this wave who have not entered yet.');
@@ -930,7 +933,6 @@ const UI = (() => {
   }
   function updateBuildPanel() {
     // Newly unlocked items stay "NEW" until the player views another tab or starts a wave.
-    if (U.unlockCount !== S.unlocked.size) U.unlockCount = S.unlocked.size;
     updateTabs();
     const sig = cardSignature();
     if (sig !== U.cardSig) { U.cardSig = sig; renderCards(); }
@@ -1017,9 +1019,9 @@ const UI = (() => {
   }
   function ensureInspectorNodes() {
     if (el.inspHead) return;
-    el.inspBody.innerHTML = '<div id="inspHead"></div><div id="inspFlags" class="insp-flags"></div><div id="inspLines"></div><div id="inspPreview"></div><div id="inspActions" class="insp-actions"></div>';
+    el.inspBody.innerHTML = '<div id="inspHead"></div><div id="inspFlags" class="insp-flags"></div><div id="inspLines"></div><div id="inspPreview"></div>';
     el.inspHead = $('inspHead'); el.inspFlags = $('inspFlags'); el.inspLines = $('inspLines');
-    el.inspPreview = $('inspPreview'); el.inspActions = $('inspActions');
+    el.inspPreview = $('inspPreview'); el.inspActions = $('inspActions'); // actions stay pinned below the scrolling body
   }
   function inspHead(icon, title, sub, closable = true) {
     return `<div class="insp-head"><div class="card-ico">${icon}</div><div style="min-width:0"><div class="insp-title">${title}</div><div class="insp-sub">${sub}</div></div>` +
@@ -1048,7 +1050,8 @@ const UI = (() => {
         hpHTML = e.dead ? `<div class="insp-hp warn">${e.respawnT > 0 ? 'Reassembling in ' + secs(e.respawnT) : 'Fallen — returns at the next wave'}</div>`
           : `<div class="insp-hp">HP ${hpBar(e.hp, e.maxHp, 'fill-mon')}</div>`;
       }
-      m.lines = hpHTML + (lines.length ? `<ul class="insp-lines">${lines.map(l => `<li>${esc(l)}</li>`).join('')}</ul>` : '');
+      const shown = hpHTML ? lines.filter(l => !HP_LINE.test(l)) : lines;
+      m.lines = hpHTML + (shown.length ? `<ul class="insp-lines">${shown.map(l => `<li>${esc(l)}</li>`).join('')}</ul>` : '');
       // Upgrade preview
       if (Build.upgradable(s)) {
         const a = itemStats(s.cat, s.id, s.level), b = itemStats(s.cat, s.id, s.level + 1);
@@ -1167,7 +1170,8 @@ const UI = (() => {
       const straight = Math.abs(S.heart.x - S.entrance.x) + Math.abs(S.heart.y - S.entrance.y);
       const parties = nw ? nw.parties.length : 0;
       let main = `Wave ${S.wave}`;
-      if (nw) main += ` · ${nw.total} hero${nw.total === 1 ? '' : 'es'} in ${parties} part${parties === 1 ? 'y' : 'ies'}` + (nw.elites ? ` · ${nw.elites} elite` : '');
+      const total = waveTotal(nw);
+      if (nw) main += ` · ${total} hero${total === 1 ? '' : 'es'} in ${parties} part${parties === 1 ? 'y' : 'ies'}` + (nw.elites ? ` · ${nw.elites} elite` : '');
       if (nw && nw.boss && HERO_BOSSES[nw.boss]) main += ` · <span class="badge badge-boss">${px('crown')}${esc(HERO_BOSSES[nw.boss].name)}</span>`;
       setHTML(el.wiMain, main);
       const sub = [];
@@ -1179,7 +1183,7 @@ const UI = (() => {
       setHTML(el.wiSub, sub.join(''));
     } else if (ph === 'wave') {
       const alive = aliveHeroes(), rem = wavesRemaining(), ws = S.ws || { kills: 0, escaped: 0 };
-      const total = Math.max(nw ? nw.total : 0, (ws.spawned || 0) + rem, 1);
+      const total = Math.max(waveTotal(nw), (ws.spawned || 0) + rem, 1);
       const done = ws.kills + ws.escaped;
       setWidth(el.wpFill, done / total);
       setText(el.wpTxt, `${done} / ${total} dealt with`);
@@ -1223,13 +1227,21 @@ const UI = (() => {
   /* ---------------------------------------------------------------------------
    * 13. RIGHT COLUMN — incoming wave preview, live status, powers, perks
    * ------------------------------------------------------------------------ */
+  /** Hero count of a wave preview (falls back to counting party members). */
+  function waveTotal(nw) {
+    if (!nw) return 0;
+    if (typeof nw.total === 'number') return nw.total;
+    let n = 0;
+    for (const p of nw.parties || []) n += (p.members || []).length;
+    return n;
+  }
   function updatePreview() {
     const nw = S.nextWave;
-    const sig = (nw ? nw.wave + ':' + nw.total + ':' + (nw.boss || '') + ':' + nw.parties.length + ':' + (nw.guildNotes || []).length : 'none') + '|' + S.perkOrder.length + '|' + S.phase;
+    const sig = (nw ? nw.wave + ':' + waveTotal(nw) + ':' + (nw.boss || '') + ':' + nw.parties.length + ':' + (nw.guildNotes || []).length : 'none') + '|' + S.perkOrder.length + '|' + S.phase;
     if (sig === U.previewSig && U.previewFor === nw) return;
     U.previewSig = sig; U.previewFor = nw;
     setText(el.pvTitle, nw ? `Incoming · Wave ${nw.wave || S.wave}` : 'Incoming Wave');
-    setHTML(el.pvNote, nw && nw.boss ? `<span class="badge badge-boss">${px('crown')}Boss</span>` : nw ? `${nw.total} heroes` : '');
+    setHTML(el.pvNote, nw && nw.boss ? `<span class="badge badge-boss">${px('crown')}Boss</span>` : nw ? `${waveTotal(nw)} heroes` : '');
     setHTML(el.previewBody, previewHTML(nw));
   }
   function previewHTML(nw) {
@@ -1255,7 +1267,8 @@ const UI = (() => {
         `<div class="party-icons">${(p.members || []).map(m => heroIconHTML(m, wave)).join('')}</div></div>`;
     });
     if (nw.guildNotes && nw.guildNotes.length) html += `<div class="notes">${nw.guildNotes.map(n => `<div class="note">${px('scroll')}<span>${esc(n)}</span></div>`).join('')}</div>`;
-    html += `<div class="pv-total"><b>${nw.total}</b> hero${nw.total === 1 ? '' : 'es'} · <b>${nw.elites || 0}</b> elite · threat <b>${nw.threat != null ? fmtInt(nw.threat) : '?'}</b></div>`;
+    const total = waveTotal(nw);
+    html += `<div class="pv-total"><b>${total}</b> hero${total === 1 ? '' : 'es'} · <b>${nw.elites || 0}</b> elite` + (nw.threat != null ? ` · threat <b>${fmtInt(nw.threat)}</b>` : '') + '</div>';
     return html;
   }
   function heroIconHTML(m, wave) {
@@ -1287,7 +1300,7 @@ const UI = (() => {
     if (ph === 'wave') for (const h of S.heroes) {
       if (!Spatial.heroAlive(h)) continue;
       const d = Path.heartDist(h.x, h.y);
-      if (d < bd) { bd = d; best = h; }
+      if (!best || d < bd) { bd = d; best = h; }
     }
     let line;
     if (best) {
@@ -1631,7 +1644,7 @@ const UI = (() => {
     if (S.phase === 'build') {
       if (S.ui.tool) {
         U.drag = { visited: new Set(), tx: p.tx, ty: p.ty, noGold: false, id: e.pointerId };
-        try { el.boardWrap.setPointerCapture(e.pointerId); } catch (err) { /* capture is optional */ }
+        try { el.boardWrap.setPointerCapture(e.pointerId); } catch { /* capture is optional */ }
         attemptPlace(p.tx, p.ty, true);
       } else selectAt(p);
     } else if (S.phase === 'wave') {
@@ -1663,7 +1676,7 @@ const UI = (() => {
   }
   function endDrag() {
     if (!U.drag) return;
-    try { if (el.boardWrap.hasPointerCapture && el.boardWrap.hasPointerCapture(U.drag.id)) el.boardWrap.releasePointerCapture(U.drag.id); } catch (err) { /* ignore */ }
+    try { if (el.boardWrap.hasPointerCapture && el.boardWrap.hasPointerCapture(U.drag.id)) el.boardWrap.releasePointerCapture(U.drag.id); } catch { /* ignore */ }
     U.drag = null;
   }
   /** 4-connected line walk from (x0,y0) exclusive to (x1,y1) inclusive. */
@@ -1756,19 +1769,23 @@ const UI = (() => {
     const before = powerCan(id);
     if (!before.ok) { SFX.play('error'); failToast(before.reason, 'warn'); S.ui.power = null; refreshNow(); return; }
     const ok = safe(() => Powers.cast(id, p.wx, p.wy), false, 'Powers.cast');
-    if (ok) S.ui.power = null;
+    if (ok) S.ui.power = null; // stays armed after a bad target so the player can simply click again
     else {
       SFX.play('error');
-      let reason = powerLastReason() || 'Cannot cast there.';
-      if (powerLastReason()) { /* the module explained itself */ }
-      else if (id === 'collapse') { const c = Grid.canCollapse(p.tx, p.ty); if (!c.ok) reason = c.reason; }
-      else if (POWERS[id].target === 'hero') {
-        const h = Spatial.nearestHero(p.wx, p.wy, 0.9);
-        reason = !h ? 'Click directly on a hero.' : (HERO_CLASSES[h.type].fearImmune || h.boss) ? 'Immune to fear.' : reason;
-      } else if (!powerCan(id).ok) reason = powerCan(id).reason || reason;
-      failToast(reason, 'warn');
+      failToast(powerLastReason() || castFailReason(id, p), 'warn');
     }
     refreshNow();
+  }
+  /** Best-effort explanation of a failed cast when the Powers module gives none. */
+  function castFailReason(id, p) {
+    if (id === 'collapse') { const c = Grid.canCollapse(p.tx, p.ty); if (!c.ok) return c.reason; }
+    if (POWERS[id].target === 'hero') {
+      const h = Spatial.nearestHero(p.wx, p.wy, 0.9);
+      if (!h) return 'Click directly on a hero.';
+      if (HERO_CLASSES[h.type].fearImmune || h.boss) return 'Immune to fear.';
+    }
+    const c = powerCan(id, p.wx, p.wy);
+    return (!c.ok && c.reason) || 'Cannot cast there.';
   }
 
   /* ---- Keyboard ------------------------------------------------------------- */
@@ -1827,9 +1844,8 @@ const UI = (() => {
   function newRun() { SFX.play('click'); Game.newRun(); }
   function startWave() {
     if (!S || S.phase !== 'build') return;
-    S.ui.tool = null;
     endDrag();
-    Game.startWave();
+    Game.startWave(); // refuses (with a toast) if the Heart is sealed off; tools are cleared by the phase change
     refreshNow();
   }
   function togglePause() {
@@ -1923,7 +1939,6 @@ const UI = (() => {
     U.run = S;
     U.seen = new Set(S.unlocked);
     for (const t of BUILD_TABS) for (const [c, i] of t.items) if (Build.isUnlocked(c, i)) U.seen.add(c + ':' + i);
-    U.unlockCount = S.unlocked.size;
     clearToasts();
     U.cardSig = ''; U.previewSig = ''; U.previewFor = undefined; U.perkSig = null;
     U.lastGold = null; U.lastHeart = null; U.cdMax = {};
@@ -1936,10 +1951,8 @@ const UI = (() => {
     const key = S.cols + 'x' + S.rows;
     if (key === U.gridKey) return;
     U.gridKey = key;
-    el.boardWrap.style.setProperty('--cols', S.cols || 20);
+    el.boardWrap.style.setProperty('--cols', S.cols || 20); // aspect-ratio of the board in the stacked layout
     el.boardWrap.style.setProperty('--rows', S.rows || 14);
-    document.documentElement.style.setProperty('--cols', S.cols || 20);
-    document.documentElement.style.setProperty('--rows', S.rows || 14);
     scheduleResize();
   }
   function scheduleResize() {
@@ -1966,7 +1979,7 @@ const UI = (() => {
     updatePerks();
     Tip.tick();
   }
-  function refreshNow() { if (U.ready) { U.hudT = HUD_INTERVAL; slowRefresh(); } }
+  function refreshNow() { if (U.ready) { U.hudT = 0; slowRefresh(); } }
   let soonQueued = false;
   /** Coalesce many refresh requests (e.g. a drag placing 10 walls) into one on the next frame. */
   function refreshSoon() {
@@ -1991,11 +2004,11 @@ const UI = (() => {
     if (phase !== 'title') closeModal('title');
     if (phase !== 'reward') closeModal('reward');
     if (phase !== 'gameover') closeModal('over');
-    if (phase !== 'wave') { S.paused = false; U.helpPaused = false; }
+    S.paused = false; // every phase starts running (the help overlay re-pauses a wave if it is open)
+    U.helpPaused = false;
     if (phase === 'wave') {
       U.bossKillsAtStart = S.stats.bossKills;
       U.cdMax = {};
-      S.paused = false;
       for (const t of BUILD_TABS) markSeen(t.id); // NEW markers last until the first wave after the unlock
     }
     if (phase === 'build') S.ui.selected = null; // the grid may have expanded (coordinates shift)
@@ -2047,6 +2060,7 @@ const UI = (() => {
     document.addEventListener('keydown', onKeyDown);
     document.addEventListener('mousedown', e => { if (e.target && e.target.closest && e.target.closest('button, .card, .tab, .perk-card, .power')) e.preventDefault(); });
     document.addEventListener('pointerover', e => {
+      U.mouseX = e.clientX; U.mouseY = e.clientY;
       const t = e.target && e.target.closest ? e.target.closest('[data-tip]') : null;
       if (t) Tip.forEl(t);
       else if (Tip.src && Tip.src !== 'board') Tip.hide();
@@ -2059,9 +2073,5 @@ const UI = (() => {
     U.ready = true;
   }
 
-  return {
-    init, update, onPhase, showTitle, showReward, showGameOver, toast, refresh,
-    /** Test/debug hooks (read-only views of UI internals). */
-    _debug: { get state() { return U; }, px, iconURL },
-  };
+  return { init, update, onPhase, showTitle, showReward, showGameOver, toast, refresh };
 })();

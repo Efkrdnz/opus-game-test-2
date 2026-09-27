@@ -79,8 +79,8 @@ const SIM_DT = 1 / 60;     // fixed simulation step
 const CFG = {
   startGold: 320,
   heartHp: 100,
-  heartPulseDmg: 12,       // flat damage per pulse to heroes adjacent to the Heart…
-  heartPulsePct: 0.12,     // …plus this fraction of each hero's max HP, so leaks are short and sharp
+  heartPulseDmg: 15,       // flat damage per pulse to heroes adjacent to (or attacking) the Heart…
+  heartPulsePct: 0.15,     // …plus this fraction of each hero's max HP, so leaks are short and sharp
   heartPulseCd: 1.0,
   heartPulseRange: 1.6,    // from Heart tile centre
   heartRegenPerWave: 8,    // Heart HP restored after each survived wave
@@ -98,16 +98,17 @@ const CFG = {
   dangerCap: 30,
   // Grid size by "tier". Tier = floor((wave-1)/10): the dungeon expands after waves 10, 20, 30.
   gridSizes: [[20, 14], [24, 16], [28, 18], [32, 20]],
-  baseIncome: 55,
-  incomePerWave: 8,
+  baseIncome: 60,
+  incomePerWave: 6,
   chestBaseValue: 25,
   chestValuePerWave: 5,
   corpseLife: 25,
   lureRadius: 5,
   // Hero scaling per wave (applied to class base stats)
-  heroHpPerWave: 0.085,
-  heroDmgPerWave: 0.05,
-  bountyPerWave: 0.07,
+  heroHpPerWave: 0.10,     // linear HP growth per wave…
+  heroHpGrowth: 1.02,      // …compounded by this factor per wave (see heroWaveScale)
+  heroDmgPerWave: 0.06,
+  bountyPerWave: 0.04,
   eliteHpMul: 1.8, eliteDmgMul: 1.3, eliteSpeedMul: 1.08, eliteBountyMul: 2.5, eliteTrapResist: 0.85,
   heroBossBountyMul: 10,
 };
@@ -195,22 +196,22 @@ const HERO_CLASSES = {
 const HERO_BOSSES = {
   champion: {
     name: 'Sir Aldric the Unbroken', title: 'The Champion', base: 'warrior',
-    hpMul: 8, dmgMul: 2.0, speedMul: 0.95, ability: 'Shield Bash', abilityCd: 6,
+    hpMul: 6, dmgMul: 1.8, speedMul: 0.95, ability: 'Shield Bash', abilityCd: 6,
     desc: 'Every 6s slams the ground, stunning monsters within 1.8 tiles for 2s and dealing heavy damage.',
   },
   archmage: {
     name: 'Archmage Velyra', title: 'The Archmage', base: 'mage',
-    hpMul: 6.5, dmgMul: 1.8, speedMul: 1.0, ability: 'Blink', abilityCd: 7,
+    hpMul: 5, dmgMul: 1.7, speedMul: 1.0, ability: 'Blink', abilityCd: 7,
     desc: 'Every 7s teleports up to 4 tiles closer to the Heart — straight through walls.',
   },
   saint: {
     name: 'High Priestess Seraphine', title: 'The Saint', base: 'cleric',
-    hpMul: 7, dmgMul: 1.6, speedMul: 1.0, ability: 'Sanctuary', abilityCd: 9,
+    hpMul: 5.5, dmgMul: 1.5, speedMul: 1.0, ability: 'Sanctuary', abilityCd: 9,
     desc: 'Every 9s heals all allies within 5 tiles for 40 HP and cleanses their ailments.',
   },
   shadow: {
     name: 'Vex, the Shadow', title: 'The Shadow', base: 'rogue',
-    hpMul: 5.5, dmgMul: 1.8, speedMul: 1.05, ability: 'Shadowstep', abilityCd: 8,
+    hpMul: 4.5, dmgMul: 1.7, speedMul: 1.05, ability: 'Shadowstep', abilityCd: 8,
     desc: 'Every 8s disarms every trap within 3 tiles and turns invisible to monsters for 3s.',
   },
 };
@@ -468,3 +469,13 @@ const PERK_BY_ID = Object.fromEntries(PERKS.map(p => [p.id, p]));
 
 /** True if the current run owns the given perk. */
 function hasPerk(id) { return !!(S && S.perks[id]); }
+
+/**
+ * Adventurer stat multipliers for wave n: linear growth plus a gentle compounding term,
+ * so a static defense that holds early is steadily out-scaled later (≈×2.3 HP at wave 10,
+ * ×4.2 at 20, ×6.9 at 30). Used by Heroes.create and the UI's previews.
+ */
+function heroWaveScale(n) {
+  const k = Math.max(0, n - 1);
+  return { hp: (1 + CFG.heroHpPerWave * k) * Math.pow(CFG.heroHpGrowth, k), dmg: 1 + CFG.heroDmgPerWave * k };
+}

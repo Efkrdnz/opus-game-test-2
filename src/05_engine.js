@@ -782,7 +782,7 @@ const Combat = {
     const tx = Math.floor(t.x), ty = Math.floor(t.y);
     if (t.team === 'hero') {
       const bounty = Econ.bounty(t);
-      const loot = Math.round(bounty * randRange(0.35, 0.7) * (hasPerk('scavenger') ? 1.5 : 1));
+      const loot = Math.round(bounty * randRange(0.25, 0.5) * (hasPerk('scavenger') ? 1.5 : 1));
       Econ.gain(bounty + loot, t.x, t.y - 0.8);
       FX.burst(t.x, t.y, { n: 8 + Math.min(20, (bounty + loot) >> 2), colors: ['#ffd84a', '#ffec8a', '#e0a800'], speed: 2.6, life: 0.9, size: 2.5, grav: 5 });
       if (t.loot) { FX.text(t.x, t.y - 1.2, 'Treasure recovered!', '#ffd84a', { size: 10 }); t.loot = 0; }
@@ -938,13 +938,22 @@ const Heart = {
       }
     }
   },
-  /** Pulse damages heroes crowding the Heart. */
+  /**
+   * Pulse damages heroes crowding the Heart AND every hero currently attacking it
+   * (ranged attackers included — the Heart lashes back at whoever strikes it).
+   */
   update(dt) {
     if (S.heartHitT > 0) S.heartHitT -= dt;
     S.heartPulseT -= dt;
     if (S.heartPulseT <= 0) {
       S.heartPulseT = CFG.heartPulseCd;
       const near = Spatial.heroesInRadius(this.cx(), this.cy(), CFG.heartPulseRange);
+      for (const h of S.heroes) {
+        if (Spatial.heroAlive(h) && h.state === 'heart' && !near.includes(h)) {
+          near.push(h);
+          FX.beam(this.cx(), this.cy() - 0.2, h.x, h.y - 0.2, { color: '#ff4d7a', width: 3, life: 0.3, jag: true });
+        }
+      }
       if (near.length) {
         const mul = hasPerk('thorns') ? 3 : 1;
         for (const h of near) Combat.damage(h, (CFG.heartPulseDmg + CFG.heartPulsePct * h.maxHp) * mul, { team: 'dm', kind: 'heart', id: 'heart', elem: 'magic' });

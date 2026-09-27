@@ -570,6 +570,13 @@ const Heroes = (() => {
    */
   function stallCheck(h, dt) {
     const ai = h.ai;
+    // A deliberate change of intent (held ≥ 1.5 s: e.g. advance → retreat) starts a fresh
+    // window; rapid flip-flopping does not, so it still gets caught.
+    ai.intentT += dt;
+    if (h.state !== ai.intentState || ai.gk !== ai.intentGk) {
+      if (ai.intentT >= 1.5) { ai.stallWin = 0; ai.stallT = 0; ai.stallX = h.x; ai.stallY = h.y; }
+      ai.intentState = h.state; ai.intentGk = ai.gk; ai.intentT = 0;
+    }
     ai.stallWin += dt;
     if (ai.wantMove && !ai.engage && !h.channel && !ai.atHeart) ai.stallT += dt;
     if (ai.stallWin < K.stallWindow) return;
@@ -613,6 +620,7 @@ const Heroes = (() => {
     const ai = h.ai;
     ai.teleports++;
     ai.atHeart = false; ai.rushing = false; ai.slot = null;
+    ai.stallWin = 0; ai.stallT = 0; ai.stallX = h.x; ai.stallY = h.y;
     h.path = null; ai.repathT = 0;
     if (!h.boss && !ai.gaveUp && ai.teleports >= K.teleportGiveUp) {
       ai.gaveUp = true;
@@ -629,14 +637,13 @@ const Heroes = (() => {
    *    'attacked' (fight back) · 'charge' (Warrior/Paladin) · 'range' (snipe) ·
    *    'melee' (something within reach)
    * ------------------------------------------------------------------------ */
+  /** Nearest fightable, non-ignored monster within r (optionally in line of sight). */
   function nearestMonster(h, r, pred, needLos) {
-    const ai = h.ai;
     let best = null, bd = r * r;
     for (const m of S.monsters) {
       if (!monsterOk(m) || (pred && !pred(m))) continue;
       const dx = m.x - h.x, dy = m.y - h.y, d2 = dx * dx + dy * dy;
-      if (d2 > bd) continue;
-      if (ignored(h, m)) continue;
+      if (d2 > bd || ignored(h, m)) continue;
       if (needLos && !Grid.los(h.x, h.y, m.x, m.y)) continue;
       bd = d2; best = m;
     }
@@ -1166,16 +1173,23 @@ const Heroes = (() => {
    * Retreating heroes look for a Cleric (any party) that is not deeper in the
    * dungeon than they are, and fall back to it to be healed.
    */
-  function findHealer(h) {
-    let best = null, bd = K.healerSeekR * K.healerSeekR;
+  function findHealer(h, r) {
+    let best = null, bd = r * r;
     for (const o of S.heroes) {
-      if (o === h || o.type !== 'cleric' || !alive(o) || !o.ai) continue;
-      if (o.ai.retreating || o.ai.escaping || o.st.fearT > 0) continue;
+      if (o === h || !healerUsable(h, o, r)) continue;
       if (!(o.ai.hd >= h.ai.hd - 2)) continue;
       const dx = o.x - h.x, dy = o.y - h.y, d2 = dx * dx + dy * dy;
       if (d2 <= bd) { bd = d2; best = o; }
     }
     return best;
+  }
+
+  /** A Cleric that can tend to us: alive, not fleeing/leaving itself, within r. */
+  function healerUsable(h, o, r) {
+    if (!o || o.type !== 'cleric' || !alive(o) || !o.ai) return false;
+    if (o.ai.retreating || o.ai.escaping || o.ai.gaveUp || o.st.fearT > 0) return false;
+    const dx = o.x - h.x, dy = o.y - h.y;
+    return dx * dx + dy * dy <= r * r;
   }
 
   function kitTick(h, c, dt) {
@@ -1343,8 +1357,10 @@ const Heroes = (() => {
       cost: null, cCareful: true, cDw: 0, cTw: 0, cDig: 0, cDigCost: 0, cFear: false, cFx: 0, cFy: 0,
       // strategic flags
       rushing: false, retreating: false, escaping: false, atHeart: false, heartR: K.heartReach, fleeing: false,
-      healer: null, healerT: 0,
-      // per-tick flags (read by separation/queueing/labels)
+      healer: null, healerT: 0, healerLost: false,
+      // per-tick flags (read by separation/queueing/labels). anchored = physically busy in
+      // place (fighting, channeling, smashing, striking the Heart, stunned): heavy in
+      // separation and others queue behind; idle waiting is deliberately NOT anchored.
       anchored: false, wantMove: false, waiting: false, charging: false, smash: null,
       // combat
       engage: null, engageKind: '', anchorX: h.x, anchorY: h.y, lostT: 0, losT: 0, los: true,
@@ -1364,6 +1380,7 @@ const Heroes = (() => {
       stuckWin: 0, stuckAcc: 0, stuckN: 0, lastPX: h.x, lastPY: h.y,
       // anti-stall / route commitment / teleport loops
       switchT: -99, plainT: 0, stallWin: 0, stallT: 0, stallX: h.x, stallY: h.y, stalls: 0,
+      intentState: '', intentGk: '', intentT: 0,
       teleports: 0, gaveUp: false, blinkT: -99,
       wdT: 0, wdX: h.x, wdY: h.y, wdStrikes: 0, noHealer: false,
     };
@@ -1395,7 +1412,7 @@ const Heroes = (() => {
         releaseLure(h);
         cancelChannel(h);
         if (ai.engage && ai.engageKind !== 'block' && ai.engageKind !== 'taunt') clearEngage(h);
-        ai.healerT = 0;
+        ai.healerT = 0; ai.healer = null; ai.healerLost = false;
         h.path = null; ai.repathT = 0;
         FX.text(h.x, h.y - 1, 'Fall back!', '#ffd0a0', { size: 10 });
       }
@@ -1466,10 +1483,19 @@ const Heroes = (() => {
     // Retreating (to a healer or out) / escaping with treasure / giving up.
     if (ai.escaping || ai.retreating || ai.gaveUp) {
       if (ai.retreating && !ai.escaping && !ai.gaveUp) {
-        if ((ai.healerT -= dt) <= 0) { ai.healerT = 0.5; ai.healer = ai.noHealer ? null : findHealer(h); }
+        if ((ai.healerT -= dt) <= 0) {
+          ai.healerT = 0.5;
+          // Sticky choice: keep a healer while it stays usable; re-acquire only well inside range.
+          if (!healerUsable(h, ai.healer, K.healerSeekR + 3)) {
+            const had = !!ai.healer;
+            ai.healer = ai.noHealer ? null : findHealer(h, had || ai.healerLost ? K.healerSeekR - 2 : K.healerSeekR);
+            if (had && !ai.healer) ai.healerLost = true;
+          }
+        }
         const hl = ai.healer;
         if (hl && alive(hl)) {
-          if (dist(h.x, h.y, hl.x, hl.y) <= 1.3) { ai.anchored = true; faceToward(h, hl.x); opportunistic(h, c); return; }
+          // Standing by the healer (not "anchored": allies can jostle past a field hospital).
+          if (dist(h.x, h.y, hl.x, hl.y) <= 1.3) { faceToward(h, hl.x); opportunistic(h, c); return; }
           setGoal(h, Math.floor(hl.x), Math.floor(hl.y), 'healer', true);
           follow(h, speedOf(h, 1), dt, 'exit');
           opportunistic(h, c);
@@ -1493,8 +1519,9 @@ const Heroes = (() => {
     if (!ai.rushing) {
       if (greedTick(h, c)) return;
       if (h.type === 'mage' && ai.blastT <= 0 && blastEvalFree && tryBlast(h, c)) return;
-      if (h.type === 'cleric' && tendWounded(h, dt)) { ai.waiting = true; ai.tending = true; ai.anchored = true; opportunistic(h, c); return; }
-      if (cohesionWait(h, dt)) { ai.waiting = true; ai.anchored = true; opportunistic(h, c); return; }
+      // Idle waits are soft (not "anchored"): whoever comes through can nudge us aside.
+      if (h.type === 'cleric' && tendWounded(h, dt)) { ai.waiting = true; ai.tending = true; opportunistic(h, c); return; }
+      if (cohesionWait(h, dt)) { ai.waiting = true; opportunistic(h, c); return; }
     }
     const g = (h.party && h.party.goal) || S.heart;
     const spd = speedOf(h, 1);

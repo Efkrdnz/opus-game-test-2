@@ -60,7 +60,7 @@ const Heroes = (() => {
     stuckWindow: 1, stuckMove: 0.12,
     // Strategy
     rushDist: 6, rushExit: 9,        // Path.heartDist hysteresis for the final rush
-    retreatPct: 0.3, recoverPct: 0.65, retreatMinDist: 6,
+    retreatPct: 0.3, retreatPctPerWave: 0.009, retreatPctMin: 0.12, recoverPct: 0.65, retreatMinDist: 6,
     healerSeekR: 8,                  // retreating heroes fall back to a Cleric this close…
     tendR: 7, tendMax: 15,           // …who holds position (≤ tendMax s) while they come to it,
     tendHardMax: 45,                 // (longer while actually treating them, never beyond this)
@@ -1449,7 +1449,10 @@ const Heroes = (() => {
     const ai = h.ai;
     if (h.boss || ai.escaping || ai.gaveUp) { ai.retreating = false; return; }
     if (!ai.retreating) {
-      if (!ai.rushing && !ai.atHeart && h.hp < K.retreatPct * h.maxHp && ai.hd > K.retreatMinDist) {
+      // Later waves are braver: the retreat threshold falls from 30% HP to 12% by wave ~21, so a
+      // deadly dungeon can't simply scare every party away late in a run.
+      const flee = Math.max(K.retreatPctMin, K.retreatPct - K.retreatPctPerWave * (S.wave - 1));
+      if (!ai.rushing && !ai.atHeart && h.hp < flee * h.maxHp && ai.hd > K.retreatMinDist) {
         ai.retreating = true;
         releaseLure(h);
         cancelChannel(h);

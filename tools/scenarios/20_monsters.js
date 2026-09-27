@@ -188,12 +188,12 @@
     H.perk('necromancy');
     H.startWave(); H.keepAlive();
     let risen = 0;
-    for (let i = 0; i < 20; i++) {
+    for (let i = 0; i < 40; i++) {
       const v = H.hero('rogue', 5, 3);
       H.DH.Combat.damage(v, 9999, { team: 'dm', kind: 'power', id: 'x' });
     }
     risen = H.S.monsters.filter(m => m.risen).length;
-    H.assert(risen >= 1 && risen <= 14, 'about 25% rose (' + risen + '/20)');
+    H.assert(risen >= 2 && risen <= 25, 'about 25% rose (' + risen + '/40)'); // P(outside) ≈ 1e-4
     H.perk('legion');
     H.DH.Game.endWave(); H.DH.Game.pickPerk(null);
     const orc = H.place('monster', 'orc', 9, 4).ent;

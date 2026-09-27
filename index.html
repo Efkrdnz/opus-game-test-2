@@ -164,6 +164,8 @@ b, strong { font-weight: 700; }
 .hud-gold.up b { animation: bumpGood .5s ease-out; }
 .hud-gold.down b { animation: bumpBad .5s ease-out; }
 .hud-best b { color: var(--text2); }
+.hud-best.record { border-color: var(--gold3); box-shadow: inset 0 1px 3px rgba(0, 0, 0, .7), 0 0 8px rgba(232, 182, 76, .35); }
+.hud-best.record b { color: var(--gold2); }
 @keyframes bumpGood { 0% { color: #b6ffc6; text-shadow: 0 0 10px #62d27f; transform: scale(1.18); } 100% { transform: none; } }
 @keyframes bumpBad { 0% { color: #ffb0b8; text-shadow: 0 0 10px #ff5364; transform: scale(.9); } 100% { transform: none; } }
 .badge {
@@ -196,6 +198,7 @@ b, strong { font-weight: 700; }
   text-shadow: 0 1px 0 #000, 0 0 3px #000, 1px 0 0 #000, -1px 0 0 #000;
 }
 .fill-mana { background: linear-gradient(180deg, #8cc0ff, #3f8cff 55%, #2358c8); }
+.fill-mana.idle { opacity: .5; filter: saturate(.6); } /* outside waves: what the next wave starts with */
 .fill-heart { background: linear-gradient(180deg, #ff8a9c, #d62644 55%, #8e1028); }
 .fill-hp { background: linear-gradient(180deg, #9af0ae, #3fae5c 60%, #257a3c); }
 .fill-hp.mid { background: linear-gradient(180deg, #ffe08a, #e0a826 60%, #9a6c10); }
@@ -260,7 +263,6 @@ b, strong { font-weight: 700; }
 .ico { display: block; width: 2rem; height: 2rem; image-rendering: pixelated; object-fit: contain; }
 .ico.glyph { display: flex; align-items: center; justify-content: center; font-size: 1.35rem; line-height: 1; filter: drop-shadow(0 1px 1px #000); }
 .ico.mini { display: inline-flex; width: 1.05rem; height: 1.05rem; vertical-align: -.2em; }
-.ico.glyph.mini { font-size: .8rem; }
 .card-key { position: absolute; left: -3px; top: -4px; font-size: .56rem; min-width: 1.2em; padding: 0 .2em; line-height: 1.45; opacity: .9; }
 .card-main { min-width: 0; display: flex; flex-direction: column; gap: .08rem; }
 .card-top { display: flex; align-items: baseline; gap: .4rem; }
@@ -295,7 +297,7 @@ b, strong { font-weight: 700; }
 body.phase-wave #cards, body.phase-reward #cards, body.phase-gameover #cards { filter: saturate(.5) brightness(.75); }
 
 /* ---- 8. Inspector ----------------------------------------------------------------- */
-#secInspect { flex: 0 1 auto; max-height: 52%; }
+#secInspect { flex: 0 0 auto; max-height: 52%; } /* the scrolling card list gives up space first */
 #inspBody { padding: .5rem .6rem .55rem; display: flex; flex-direction: column; gap: .4rem; }
 .insp-empty { font-size: .76rem; color: var(--text3); line-height: 1.45; }
 .insp-empty b { color: var(--text2); }
@@ -724,7 +726,14 @@ body.phase-title #secPerks { flex: 1 1 auto; max-height: none; }
   #cards { max-height: 26rem; }
   #secInspect, #secPerks, #secPreview { max-height: none; flex: none; }
   #previewBody { max-height: 30rem; }
-  body.phase-wave #secBuild { display: none; } /* nothing to build mid-wave: bring powers up */
+  body.phase-wave #secBuild { display: none; } /* nothing to build mid-wave */
+  /* DM Powers dock to the bottom of the screen during waves so they are always reachable. */
+  body.phase-wave #secPowers { position: fixed; left: 0; right: 0; bottom: 0; z-index: 30; border-radius: 0; border-width: 1px 0 0; box-shadow: 0 -8px 24px rgba(0, 0, 0, .7); }
+  body.phase-wave #secPowers .panel-head { display: none; }
+  body.phase-wave .mana-line { padding: .35rem .55rem 0; }
+  body.phase-wave .powers { flex-direction: row; padding: .3rem .45rem .45rem; }
+  body.phase-wave .power { min-width: 0; }
+  body.phase-wave #app { padding-bottom: 5.4rem; }
   .sum-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .help-grid { grid-template-columns: 1fr; }
   .modal { align-items: flex-start; overflow-y: auto; }
@@ -732,6 +741,14 @@ body.phase-title #secPerks { flex: 1 1 auto; max-height: none; }
 }
 @media (max-width: 700px) {
   #main { grid-template-columns: minmax(0, 1fr); grid-template-areas: "center" "left" "right"; }
+  /* compact docked powers: icon, name and cost stacked */
+  body.phase-wave .power { display: flex; flex-direction: column; align-items: center; gap: .1rem; min-height: 0; padding: .25rem .2rem; text-align: center; }
+  body.phase-wave .power .pw-status, body.phase-wave .power kbd { display: none; }
+  body.phase-wave .pw-ico { width: 1.9rem; height: 1.9rem; font-size: 1.05rem; }
+  body.phase-wave .pw-text { max-width: 100%; }
+  body.phase-wave .pw-name { font-size: .64rem; }
+  body.phase-wave .pw-cost { font-size: .68rem; }
+  body.phase-wave #app { padding-bottom: 6.6rem; }
   .perk-row { grid-template-columns: 1fr; }
   .howto { grid-template-columns: 1fr; }
   .btn.toggle span { display: none; }
@@ -760,7 +777,7 @@ body.phase-title #secPerks { flex: 1 1 auto; max-height: none; }
       <div class="hud-stat hud-gold" id="hudGoldBox" data-tip="hud|gold"><i data-px="coin"></i><b id="hudGold">0</b></div>
       <div class="meter meter-mana" data-tip="hud|mana"><i data-px="mana"></i><div class="bar"><i class="fill fill-mana" id="hudManaFill"></i><span id="hudManaTxt">0 / 100</span></div></div>
       <div class="meter meter-heart" id="hudHeart" data-tip="hud|heart"><i data-px="heart"></i><div class="bar"><i class="fill fill-heart" id="hudHeartFill"></i><span id="hudHeartTxt">100 / 100</span></div></div>
-      <div class="hud-stat hud-best" data-tip="hud|best"><i data-px="trophy"></i><span class="lbl">Best</span><b id="hudBest">0</b></div>
+      <div class="hud-stat hud-best" id="hudBestBox" data-tip="hud|best"><i data-px="trophy"></i><span class="lbl">Best</span><b id="hudBest">0</b></div>
     </div>
     <div class="controls">
       <div class="seg" id="speedSeg">
@@ -1051,7 +1068,7 @@ const HERO_CLASSES = {
 const HERO_BOSSES = {
   champion: {
     name: 'Sir Aldric the Unbroken', title: 'The Champion', base: 'warrior',
-    hpMul: 6, dmgMul: 1.8, speedMul: 0.95, ability: 'Shield Bash', abilityCd: 6,
+    hpMul: 4, dmgMul: 1.4, speedMul: 0.95, ability: 'Shield Bash', abilityCd: 6,
     desc: 'Every 6s slams the ground, stunning monsters within 1.8 tiles for 2s and dealing heavy damage.',
   },
   archmage: {
@@ -1193,7 +1210,7 @@ const OBJECTS = {
   },
   torch: {
     name: 'Torch', cost: 15, unlock: 1,
-    desc: 'Heroes in its light are Exposed (+25% damage taken) — but hidden traps in the light are visible to them.',
+    desc: 'Heroes in its light are Exposed (+25% damage taken) and can’t stay invisible — but hidden traps in the light are visible to them.',
   },
   barricade: {
     name: 'Barricade', cost: 30, unlock: 1, hp: 160,
@@ -1292,7 +1309,7 @@ const PERKS = [
   { id: 'hidden_depths', name: 'Hidden Depths', rarity: 'rare', icon: '🌑', desc: 'All traps start hidden, and Rogues’ detection chance is halved.' },
   { id: 'web_weaver', name: 'Web Weaver', rarity: 'rare', icon: '🕸️', desc: 'Spider webs root for 1s and splash every hero within 1 tile.', req: ['monster', 'spider'] },
   { id: 'warcry', name: 'Orcish Warcry', rarity: 'rare', icon: '📢', desc: 'Orc Brutes taunt heroes within 2 tiles (they must fight the Orc) and take 20% less damage.', req: ['monster', 'orc'] },
-  { id: 'thorns', name: 'Heart of Thorns', rarity: 'rare', icon: '🌹', desc: 'The Heart’s pulse deals triple damage to adjacent heroes.' },
+  { id: 'thorns', name: 'Heart of Thorns', rarity: 'rare', icon: '🌹', desc: 'The Heart’s pulse deals double damage to the heroes it strikes.' },
   { id: 'interest', name: 'Compound Interest', rarity: 'rare', icon: '📈', desc: 'At the end of each wave, gain 10% of your unspent gold (max 75).' },
   { id: 'mastermind', name: 'Mastermind', rarity: 'rare', icon: '🧠', desc: 'Heroes forget danger much faster between waves.' },
   { id: 'infernal_pact', name: 'Infernal Pact', rarity: 'rare', icon: '😈', desc: 'Imp bolts ignite heroes (4 damage/sec for 3s) and Imps gain +1 range.', req: ['monster', 'imp'] },
@@ -1309,15 +1326,15 @@ const PERKS = [
   { id: 'spectral_host', name: 'Spectral Host', rarity: 'epic', icon: '🌫️', desc: 'Wraiths cost 40% less and their hits have a 25% chance to Fear heroes for 1.5s.', req: ['monster', 'wraith'] },
   { id: 'labyrinth_lord', name: 'Labyrinth Lord', rarity: 'epic', icon: '🐂', desc: 'Unlock the Minotaur now. Its Charge recharges 35% faster.', unlocks: [['boss', 'minotaur']] },
   { id: 'dark_pact', name: 'Dark Pact', rarity: 'epic', icon: '☠️', desc: 'Unlock the Lich now. Raise Dead raises 1 extra corpse.', unlocks: [['boss', 'lich']] },
-  { id: 'glass_cannon', name: 'Glass Cannon', rarity: 'epic', icon: '🔮', desc: 'Traps deal +60% damage, but the Heart permanently loses 30% of its max HP.', tradeoff: true },
-  { id: 'blood_money', name: 'Blood Money', rarity: 'epic', icon: '💸', desc: 'Kills give double gold, but escaping heroes steal triple.', tradeoff: true },
+  { id: 'glass_cannon', name: 'Glass Cannon', rarity: 'epic', icon: '🔮', desc: 'Traps deal +40% damage, but the Heart permanently loses 30% of its max HP.', tradeoff: true },
+  { id: 'blood_money', name: 'Blood Money', rarity: 'epic', icon: '💸', desc: 'Kills give double gold, but every hero that escapes steals triple its bounty (and stolen treasure is tripled).', tradeoff: true },
   { id: 'cursed_gold', name: 'Cursed Gold', rarity: 'epic', icon: '🪬', desc: 'Chests lure from 1.5× distance and heroes carrying treasure move 40% slower — but treasure that escapes costs you double.', tradeoff: true },
   // ---- Legendary ----
-  { id: 'dragons_hoard', name: 'Dragon’s Hoard', rarity: 'legendary', icon: '🐉', desc: 'Unlock the Dragon now. The Dragon deals +10% damage for each Treasure Chest you own.', unlocks: [['boss', 'dragon']] },
-  { id: 'undying_heart', name: 'Undying Heart', rarity: 'legendary', icon: '💖', desc: 'Once per wave, the Heart survives a lethal blow at 1 HP and Fears every hero within 5 tiles.' },
-  { id: 'time_warp', name: 'Time Warp', rarity: 'legendary', icon: '⏳', desc: 'All heroes move 15% slower.' },
+  { id: 'dragons_hoard', name: 'Dragon’s Hoard', rarity: 'legendary', icon: '🐉', desc: 'Unlock the Dragon now. The Dragon deals +10% damage for each Treasure Chest you own (max +50%).', unlocks: [['boss', 'dragon']] },
+  { id: 'undying_heart', name: 'Undying Heart', rarity: 'legendary', icon: '💖', desc: 'Once per wave, a lethal blow leaves the Heart at 25% HP instead, and every hero within 5 tiles flees in terror for 6s.' },
+  { id: 'time_warp', name: 'Time Warp', rarity: 'legendary', icon: '⏳', desc: 'All heroes move 25% slower.' },
   { id: 'legion', name: 'Legion of Bone', rarity: 'legendary', icon: '🦴', desc: 'Your non-undead monsters rise again as Skeletons when slain (for the rest of the wave).' },
-  { id: 'trapmaster', name: 'Trapmaster', rarity: 'legendary', icon: '⚙️', desc: 'One-use traps rearm themselves 8s after triggering, and repairs are free.' },
+  { id: 'trapmaster', name: 'Trapmaster', rarity: 'legendary', icon: '⚙️', desc: 'All traps recharge 20% faster, one-use traps rearm themselves 8s after triggering, and repairs are free.' },
   { id: 'midas', name: 'Midas Curse', rarity: 'legendary', icon: '🏆', desc: 'Wave income is doubled, but heroes have +20% HP.', tradeoff: true },
 ];
 const PERK_BY_ID = Object.fromEntries(PERKS.map(p => [p.id, p]));
@@ -1333,6 +1350,22 @@ function hasPerk(id) { return !!(S && S.perks[id]); }
 function heroWaveScale(n) {
   const k = Math.max(0, n - 1);
   return { hp: (1 + CFG.heroHpPerWave * k) * Math.pow(CFG.heroHpGrowth, k), dmg: 1 + CFG.heroDmgPerWave * k };
+}
+
+/**
+ * Every multiplier that applies to one adventurer — wave scaling × elite × hero boss × perks —
+ * in one place, so Heroes.create, the kill bounty and the UI's estimates can never drift apart.
+ * @param o { elite, boss } @returns { hp, dmg, spd, bounty } multipliers of the class base stats
+ */
+function heroStatMuls(o = {}, wave = S ? S.wave : 1) {
+  const w = Math.max(1, wave | 0), sc = heroWaveScale(w);
+  const m = { hp: sc.hp, dmg: sc.dmg, spd: 1, bounty: 1 + CFG.bountyPerWave * (w - 1) };
+  if (o.elite) { m.hp *= CFG.eliteHpMul; m.dmg *= CFG.eliteDmgMul; m.spd *= CFG.eliteSpeedMul; m.bounty *= CFG.eliteBountyMul; }
+  const b = o.boss && HERO_BOSSES[o.boss];
+  if (b) { m.hp *= b.hpMul; m.dmg *= b.dmgMul; m.spd *= b.speedMul; m.bounty *= CFG.heroBossBountyMul; }
+  if (hasPerk('midas')) m.hp *= 1.2;
+  if (hasPerk('blood_money')) m.bounty *= 2;
+  return m;
 }
 
 /* =============================================================================
@@ -1415,8 +1448,6 @@ const Grid = {
     const t = S.tiles[y * S.cols + x].type;
     return t === T.WALL || t === T.ROCK;
   },
-  /** Floor-like tiles that entities can stand on (barricades are handled separately). */
-  isOpen(x, y) { return !this.isSolid(x, y); },
   /** Unbroken barricade on this tile? */
   barricadeAt(x, y) {
     const t = this.tile(x, y);
@@ -1463,8 +1494,9 @@ const Grid = {
   },
 
   /**
-   * Expand the dungeon to a larger size (called between waves). New space is
-   * added on the entrance (left) side and split top/bottom; everything shifts.
+   * Expand the dungeon to a larger size (called between waves). A new antechamber is dug out
+   * on the entrance (left) side and the frame grows by a row top and bottom; everything shifts
+   * and the old dungeon (maze included) is preserved behind its old outer wall.
    */
   expand(cols, rows) {
     if (cols <= S.cols && rows <= S.rows) return false;
@@ -1484,8 +1516,16 @@ const Grid = {
       const oldBorder = x === 0 || y === 0 || y === or - 1; // old right border stays the right border
       const nt = this.tile(nx, ny);
       if (!nt) continue;
-      if (x === oc - 1) { nt.type = T.ROCK; continue; }
-      if (oldBorder) { nt.type = T.FLOOR; continue; } // old left/top/bottom edge opens up (incl. old entrance)
+      if (x === oc - 1) { nt.type = T.ROCK; nt.s = ot.s; continue; } // right border stays; keeps mounted Arrow Walls
+      if (oldBorder) {
+        // The old outer wall is KEPT so the player's maze survives the expansion: only the old
+        // entrance opens into the newly dug antechamber. The rest becomes plain player stone
+        // (sells for 0g to reclaim space; Mages and Miners can breach it). Rock carrying an
+        // Arrow Wall stays rock with its trap.
+        if (ot.type === T.ENTRANCE) { nt.type = T.FLOOR; continue; }
+        if (ot.s) { nt.type = T.ROCK; nt.s = ot.s; continue; }
+        nt.type = T.WALL; nt.paid = 0; nt.rubble = false; continue;
+      }
       nt.type = ot.type; nt.s = ot.s; nt.paid = ot.paid; nt.rubble = ot.rubble; nt.deco = ot.deco;
       S.danger[ny * cols + nx] = oldDanger[y * oc + x];
     }
@@ -1500,6 +1540,9 @@ const Grid = {
     S.entrance = { x: 0, y: Math.floor(rows / 2) };
     this.tile(S.entrance.x, S.entrance.y).type = T.ENTRANCE;
     this.tile(S.heart.x, S.heart.y).type = T.HEART;
+    // Effects already in flight (e.g. a perk's heal ring) move with the world.
+    for (const a of [FX.parts, FX.texts, FX.rings, FX.tileFlashes]) for (const o of a) { o.x += dx; o.y += dy; }
+    for (const b of FX.beams) { b.x0 += dx; b.x1 += dx; b.y0 += dy; b.y1 += dy; }
     // A few new outcrops in the freshly dug area.
     this.scatterRocksIn(1, dx + 1, 1, rows - 1, 2 + ((Math.random() * 2) | 0));
     Path.bump();
@@ -1520,18 +1563,33 @@ const Grid = {
   },
 
   /**
-   * Line of sight between two world points: false if any wall/rock lies between.
-   * (Barricades do not block sight.)
+   * Exact grid traversal (Amanatides & Woo) of the segment A→B. Returns false as soon as the
+   * segment enters a solid tile. The start tile is never tested; the end tile only if
+   * `includeEnd`. A segment passing exactly through a tile corner must have both side tiles clear.
+   * Line of sight and projectile wall checks share this so they can never disagree.
    */
-  los(ax, ay, bx, by) {
-    const d = dist(ax, ay, bx, by);
-    const steps = Math.ceil(d / 0.2);
-    for (let i = 1; i < steps; i++) {
-      const t = i / steps;
-      if (this.isSolid(Math.floor(ax + (bx - ax) * t), Math.floor(ay + (by - ay) * t))) return false;
+  traceClear(ax, ay, bx, by, includeEnd) {
+    let x = Math.floor(ax), y = Math.floor(ay);
+    const ex = Math.floor(bx), ey = Math.floor(by);
+    const dx = bx - ax, dy = by - ay;
+    const stepX = dx > 0 ? 1 : -1, stepY = dy > 0 ? 1 : -1;
+    const tdx = dx !== 0 ? Math.abs(1 / dx) : Infinity, tdy = dy !== 0 ? Math.abs(1 / dy) : Infinity;
+    let tmx = dx !== 0 ? (dx > 0 ? x + 1 - ax : ax - x) * tdx : Infinity;
+    let tmy = dy !== 0 ? (dy > 0 ? y + 1 - ay : ay - y) * tdy : Infinity;
+    let n = Math.abs(ex - x) + Math.abs(ey - y);
+    while (n > 0) {
+      if (tmx < tmy - 1e-9) { x += stepX; tmx += tdx; n--; }
+      else if (tmy < tmx - 1e-9) { y += stepY; tmy += tdy; n--; }
+      else { // exactly through a corner
+        if (this.isSolid(x + stepX, y) || this.isSolid(x, y + stepY)) return false;
+        x += stepX; y += stepY; tmx += tdx; tmy += tdy; n -= 2;
+      }
+      if ((includeEnd || x !== ex || y !== ey) && this.isSolid(x, y)) return false;
     }
     return true;
   },
+  /** Line of sight between two world points: false if any wall/rock lies strictly between (barricades don't block). */
+  los(ax, ay, bx, by) { return this.traceClear(ax, ay, bx, by, false); },
 
   /** Turn a WALL tile back into floor (mage blast / miner dig). Destroys any mounted trap. */
   destroyWall(x, y, cause) {
@@ -1567,14 +1625,21 @@ const Grid = {
     if (!chk.ok) return false;
     const t = this.tile(x, y);
     t.type = T.WALL; t.rubble = true; t.paid = 0;
+    // Shove to the nearest neighbour a unit may stand on: never the Heart, the Entrance, a standing
+    // barricade, or diagonally through a wall corner (falls back to any open tile if boxed in).
     const shove = e => {
-      let best = null, bd = 1e9;
+      let best = null, bd = 1e9, loose = null, ld = 1e9;
       for (const [ddx, ddy] of DIRS8) {
         const nx = x + ddx, ny = y + ddy;
         if (this.isSolid(nx, ny)) continue;
         const d = dist(e.x, e.y, nx + 0.5, ny + 0.5);
+        if (d < ld) { ld = d; loose = [nx, ny]; }
+        const tt = this.tile(nx, ny).type;
+        if (tt === T.HEART || tt === T.ENTRANCE || this.barricadeAt(nx, ny)) continue;
+        if (ddx && ddy && (this.isSolid(x + ddx, y) || this.isSolid(x, y + ddy))) continue;
         if (d < bd) { bd = d; best = [nx, ny]; }
       }
+      best = best || loose;
       if (best) { e.x = best[0] + 0.5; e.y = best[1] + 0.5; }
       e.path = null;
     };
@@ -1596,7 +1661,7 @@ const Grid = {
  * 3. PATHFINDING
  *    • reachable()  — BFS validity check used by every wall placement.
  *    • astar()      — weighted A* with a caller-supplied cost function.
- *    • distance fields from the Heart and the Entrance (cached per pathVersion).
+ *    • a distance field from the Heart (cached per pathVersion).
  * -------------------------------------------------------------------------- */
 class MinHeap {
   constructor() { this.k = []; this.v = []; }
@@ -1633,11 +1698,13 @@ class MinHeap {
 
 const Path = {
   _n: 0, _g: null, _came: null, _stamp: null, _closed: null, _gen: 0, _heap: new MinHeap(),
-  _heartField: null, _heartVer: -1, _entField: null, _entVer: -1,
+  _heartField: null, _heartVer: -1,
   _preview: null, _previewKey: '',
 
   /** Call whenever walkability, structures or traps change. */
   bump() { if (S) S.pathVersion++; },
+  /** Forget every cache (a new run restarts the version counters, so stale keys could collide). */
+  reset() { this._heartField = this._preview = null; this._heartVer = -1; this._previewKey = ''; },
 
   _ensure() {
     const n = S.cols * S.rows;
@@ -1707,14 +1774,6 @@ const Path = {
     }
     x = Math.floor(x); y = Math.floor(y);
     return Grid.inb(x, y) ? this._heartField[y * S.cols + x] : Infinity;
-  },
-  /** Walking distance (tiles) from (x,y) to the Entrance; Infinity if cut off. */
-  entranceDist(x, y) {
-    if (this._entVer !== S.pathVersion || !this._entField || this._entField.length !== S.cols * S.rows) {
-      this._entField = this._field(S.entrance.x, S.entrance.y); this._entVer = S.pathVersion;
-    }
-    x = Math.floor(x); y = Math.floor(y);
-    return Grid.inb(x, y) ? this._entField[y * S.cols + x] : Infinity;
   },
 
   /**
@@ -1899,7 +1958,7 @@ function makeStatus() {
   return {
     slow: 0, slowT: 0, burn: 0, burnT: 0, burnSrc: null, bleed: 0, bleedT: 0, bleedSrc: null,
     stunT: 0, rootT: 0, fearT: 0, fearX: 0, fearY: 0, buffT: 0, buffDmg: 1, buffSpd: 1,
-    dotT: 0, exposed: false, invisT: 0,
+    dotT: 0, burnAcc: 0, bleedAcc: 0, exposed: false, invisT: 0,
   };
 }
 
@@ -1920,16 +1979,6 @@ const Spatial = {
       if (!includeInvisible && h.st.invisT > 0) continue;
       const dx = h.x - x, dy = h.y - y;
       if (dx * dx + dy * dy <= r2) out.push(h);
-    }
-    return out;
-  },
-  monstersInRadius(x, y, r, includeDisguised = false) {
-    const out = [], r2 = r * r;
-    for (const m of S.monsters) {
-      if (m.dead || m.removed) continue;
-      if (!includeDisguised && m.disguised) continue;
-      const dx = m.x - x, dy = m.y - y;
-      if (dx * dx + dy * dy <= r2) out.push(m);
     }
     return out;
   },
@@ -1998,7 +2047,7 @@ const Status = {
       case 'stun': st.stunT = Math.max(st.stunT, o.dur * bossResist); break;
       case 'root': st.rootT = Math.max(st.rootT, o.dur * bossResist); break;
       case 'fear': {
-        if (e.team === 'hero' && (HERO_CLASSES[e.type].fearImmune || e.boss)) {
+        if (this.fearImmune(e)) {
           FX.text(e.x, e.y - 0.6, 'Immune', '#ffe28a', { size: 10 });
           return false;
         }
@@ -2013,6 +2062,8 @@ const Status = {
     }
     return true;
   },
+  /** Paladins and hero bosses shrug off Fear (single source of truth for powers, UI and render). */
+  fearImmune(e) { return !!e && e.team === 'hero' && (!!(HERO_CLASSES[e.type] && HERO_CLASSES[e.type].fearImmune) || !!e.boss); },
   cleanse(e) {
     const st = e.st;
     st.slowT = st.burnT = st.bleedT = st.stunT = st.rootT = st.fearT = 0;
@@ -2028,7 +2079,13 @@ const Status = {
     if (st.invisT > 0) st.invisT -= dt;
     if (e.flashT > 0) e.flashT -= dt;
     if (e.animT > 0) e.animT -= dt;
-    if (e.team === 'hero') st.exposed = Light.isLit(e.x, e.y);
+    if (e.team === 'hero') {
+      st.exposed = Light.isLit(e.x, e.y);
+      if (st.exposed && st.invisT > 0) { // torchlight reveals heroes: invisibility breaks in the light
+        st.invisT = 0;
+        FX.text(e.x, e.y - 0.8, 'Revealed!', '#ffd27a', { size: 10 });
+      }
+    }
     const burning = st.burnT > 0, bleeding = st.bleedT > 0;
     if (burning) st.burnT -= dt;
     if (bleeding) st.bleedT -= dt;
@@ -2036,16 +2093,21 @@ const Status = {
       st.dotT += dt;
       if (st.dotT >= 0.5) {
         st.dotT -= 0.5;
+        // Fractional damage is carried between ticks so odd DPS values aren't rounded away (or up).
         if (burning) {
-          Combat.damage(e, st.burn * 0.5, Object.assign({ team: 'dm', kind: 'dot' }, st.burnSrc || {}, { elem: 'fire', dot: true }));
+          st.burnAcc = (st.burnAcc || 0) + st.burn * 0.5;
+          const w = Math.floor(st.burnAcc);
+          if (w > 0) { st.burnAcc -= w; Combat.damage(e, w, Object.assign({ team: 'dm', kind: 'dot' }, st.burnSrc || {}, { elem: 'fire', dot: true })); }
           if (Math.random() < 0.7) FX.burst(e.x, e.y - 0.2, { n: 3, colors: ['#ffb347', '#ff6a1f', '#ffe066'], speed: 0.8, life: 0.5, size: 2, grav: -3 });
         }
         if (bleeding && !e.dead) {
-          Combat.damage(e, st.bleed * 0.5, Object.assign({ team: 'dm', kind: 'dot' }, st.bleedSrc || {}, { elem: 'phys', dot: true }));
+          st.bleedAcc = (st.bleedAcc || 0) + st.bleed * 0.5;
+          const w = Math.floor(st.bleedAcc);
+          if (w > 0) { st.bleedAcc -= w; Combat.damage(e, w, Object.assign({ team: 'dm', kind: 'dot' }, st.bleedSrc || {}, { elem: 'phys', dot: true })); }
           FX.burst(e.x, e.y, { n: 2, colors: ['#a0101a', '#d02030'], speed: 0.6, life: 0.5, size: 2, grav: 4 });
         }
       }
-    } else st.dotT = 0;
+    } else { st.dotT = 0; st.burnAcc = 0; st.bleedAcc = 0; }
   },
   /** Movement multiplier from slows / roots / stuns / buffs (0 = cannot move). */
   speedMul(e) {
@@ -2076,7 +2138,7 @@ const Combat = {
     if (t.team === 'hero') {
       if (t.st.exposed) a *= 1 + CFG.torchExposed;
       if (trapish) {
-        if (hasPerk('glass_cannon')) a *= 1.6;
+        if (hasPerk('glass_cannon')) a *= 1.4;
         if (t.elite) a *= CFG.eliteTrapResist;
       }
       const fr = HERO_CLASSES[t.type].fireResist;
@@ -2133,11 +2195,10 @@ const Combat = {
         if (S.ws) S.ws.trapKills[trapId] = (S.ws.trapKills[trapId] || 0) + 1;
       }
       Danger.add(tx, ty, 6, 2);
-      S.corpses.push({ x: t.x, y: t.y, type: t.type, t: CFG.corpseLife, uid: t.uid });
-      if (hasPerk('necromancy') && !t.boss && Math.random() < 0.25) {
-        const m = Monsters.summon('skeleton', t.x, t.y, { temp: true, risen: true });
-        if (m) FX.text(t.x, t.y - 1, 'Risen!', '#bb88ff', { size: 11 });
-      }
+      // Necromancy first: a hero that rises as a Skeleton leaves no corpse (so a Lich can't raise it twice).
+      const risen = hasPerk('necromancy') && !t.boss && Math.random() < 0.25 ? Monsters.summon('skeleton', t.x, t.y, { temp: true, risen: true }) : null;
+      if (risen) FX.text(t.x, t.y - 1, 'Risen!', '#bb88ff', { size: 11 });
+      else S.corpses.push({ x: t.x, y: t.y, type: t.type, t: CFG.corpseLife, uid: t.uid, face: t.face || 1, boss: t.boss || null });
       if (hasPerk('soul_harvest')) S.mana = Math.min(S.manaMax, S.mana + 4);
       if (t.boss) {
         S.stats.bossKills++;
@@ -2215,8 +2276,9 @@ const Proj = {
         }
       }
       const step = p.speed * dt;
+      const ox = p.x, oy = p.y;
       p.x += p.dx * step; p.y += p.dy * step; p.travelled += step;
-      if (!p.ghost && Grid.isSolid(Math.floor(p.x), Math.floor(p.y))) { this._end(p); continue; }
+      if (!p.ghost && !Grid.traceClear(ox, oy, p.x, p.y, true)) { this._end(p); continue; }
       if (p.travelled >= p.range) { this._end(p); continue; }
       if (!p.target) {
         const foes = p.team === 'dm' ? S.heroes : S.monsters;
@@ -2248,6 +2310,8 @@ const Proj = {
  * -------------------------------------------------------------------------- */
 const Heart = {
   cx() { return S.heart.x + 0.5; },
+  /** Multiplier on the retaliation pulse (Heart of Thorns doubles it). */
+  pulseMul() { return hasPerk('thorns') ? 2 : 1; },
   cy() { return S.heart.y + 0.5; },
   damage(amt, src = {}) {
     if (S.phase !== 'wave' || S.heartHp <= 0 || S.endingT >= 0) return;
@@ -2263,8 +2327,8 @@ const Heart = {
     SFX.play('heart');
     if (S.heartHp <= 0) {
       if (hasPerk('undying_heart') && !S.undyingUsed) {
-        S.undyingUsed = true; S.heartHp = 1;
-        for (const h of Spatial.heroesInRadius(this.cx(), this.cy(), 5)) Status.apply(h, 'fear', { dur: 4, x: this.cx(), y: this.cy() });
+        S.undyingUsed = true; S.heartHp = Math.max(1, Math.round(S.heartMax * 0.25));
+        for (const h of Spatial.heroesInRadius(this.cx(), this.cy(), 5)) Status.apply(h, 'fear', { dur: 6, x: this.cx(), y: this.cy() });
         FX.ring(this.cx(), this.cy(), { color: '#ff7ad9', r0: 0.5, r1: 5, life: 0.8, width: 4 });
         FX.flash('#ff7ad9', 0.3);
         SFX.play('fear');
@@ -2292,7 +2356,7 @@ const Heart = {
         }
       }
       if (near.length) {
-        const mul = hasPerk('thorns') ? 3 : 1;
+        const mul = this.pulseMul();
         for (const h of near) Combat.damage(h, (CFG.heartPulseDmg + CFG.heartPulsePct * h.maxHp) * mul, { team: 'dm', kind: 'heart', id: 'heart', elem: 'magic' });
         FX.ring(this.cx(), this.cy(), { color: hasPerk('thorns') ? '#ff3b6b' : '#ff7a9a', r0: 0.4, r1: CFG.heartPulseRange + 0.3, life: 0.45, width: 3 });
       }
@@ -2328,14 +2392,7 @@ const Econ = {
     if (amt > 0) UI.toast(`A thief escaped with ${amt} gold!`, 'bad');
     return amt;
   },
-  bounty(h) {
-    const base = HERO_CLASSES[h.type].gold;
-    let g = base * (1 + CFG.bountyPerWave * (S.wave - 1));
-    if (h.elite) g *= CFG.eliteBountyMul;
-    if (h.boss) g *= CFG.heroBossBountyMul;
-    if (hasPerk('blood_money')) g *= 2;
-    return Math.round(g);
-  },
+  bounty(h) { return Math.round(HERO_CLASSES[h.type].gold * heroStatMuls({ elite: h.elite, boss: h.boss }).bounty); },
   waveIncome() {
     let g = CFG.baseIncome + CFG.incomePerWave * S.wave;
     if (hasPerk('midas')) g *= 2;
@@ -2372,7 +2429,9 @@ const Build = {
   repairCost(s) {
     if (!s || !s.broken) return 0;
     if (hasPerk('trapmaster')) return 0;
-    return Math.max(1, Math.ceil(this.def(s.cat, s.id).cost * CFG.repairRate));
+    // Slain monsters/bosses are revived for a share of everything invested in them (upgrades too).
+    const base = s.cat === 'monster' || s.cat === 'boss' ? s.spent : this.def(s.cat, s.id).cost;
+    return Math.max(1, Math.ceil(base * CFG.repairRate));
   },
   totalRepairCost() { return S.structs.filter(s => s.broken).reduce((a, s) => a + this.repairCost(s), 0); },
   sellValue(x, y) {
@@ -2517,6 +2576,7 @@ const Build = {
   _fix(s) {
     s.broken = false; s.cd = 0;
     if (s.maxHp) s.hp = s.maxHp;
+    if (s.ent && typeof Monsters !== 'undefined' && Monsters.revive) Monsters.revive(s.ent);
     FX.burst(s.x + 0.5, s.y + 0.5, { n: 10, colors: ['#9fe8ff', '#ffffff'], speed: 1.5, life: 0.5, size: 2, grav: -2 });
     Path.bump();
   },
@@ -2572,6 +2632,15 @@ const FX = {
   /** Floating text (damage numbers, gold, callouts). o: {size, vy, life} */
   text(x, y, str, color = '#fff', o = {}) {
     if (this.texts.length > 120) this.texts.shift();
+    // Lift the new text above any text that just appeared at the same spot, so simultaneous
+    // hits read as separate numbers (e.g. "10" and "3", not "103").
+    for (let pass = 0; pass < 6; pass++) {
+      let bumped = false;
+      for (const t of this.texts) {
+        if (t.max - t.life < 0.35 && Math.abs(t.x - x) < 0.7 && Math.abs(t.y - y) < 0.3) { y = t.y - 0.34; bumped = true; }
+      }
+      if (!bumped) break;
+    }
     const life = o.life ?? 0.9;
     this.texts.push({ x, y, vy: o.vy ?? -1.1, str: String(str), color, size: o.size ?? 11, life, max: life });
   },
@@ -2593,6 +2662,10 @@ const FX = {
   flash(color = '#fff', life = 0.2) { this.screenFlash = { color, life, max: life }; },
 
   update(dt) {
+    // Floating text and camera shake are for the player's eyes: at 2×/4× speed they advance at
+    // real-time pace (the sim runs several steps per frame), so numbers stay readable.
+    const k = (S && S.phase === 'wave' && S.speed > 1) ? 1 / S.speed : 1;
+    const dtr = dt * k;
     for (const p of this.parts) {
       p.life -= dt;
       p.vy += p.grav * dt;
@@ -2601,7 +2674,7 @@ const FX = {
       p.x += p.vx * dt; p.y += p.vy * dt;
     }
     this.parts = this.parts.filter(p => p.life > 0);
-    for (const t of this.texts) { t.life -= dt; t.y += t.vy * dt; t.vy *= Math.max(0, 1 - 1.8 * dt); }
+    for (const t of this.texts) { t.life -= dtr; t.y += t.vy * dtr; t.vy *= Math.max(0, 1 - 1.8 * dtr); }
     this.texts = this.texts.filter(t => t.life > 0);
     for (const r of this.rings) r.life -= dt;
     this.rings = this.rings.filter(r => r.life > 0);
@@ -2613,7 +2686,7 @@ const FX = {
     if (this.shakeMag > 0.05) {
       this.shakeX = (Math.random() * 2 - 1) * this.shakeMag;
       this.shakeY = (Math.random() * 2 - 1) * this.shakeMag;
-      this.shakeMag *= Math.max(0, 1 - 9 * dt);
+      this.shakeMag *= Math.max(0, 1 - 9 * dtr);
     } else { this.shakeMag = 0; this.shakeX = this.shakeY = 0; }
   },
 };
@@ -2739,7 +2812,10 @@ const SFX = {
  *  Private per-hero brain state lives in `h.ai` (no other module reads it).
  *  Documented hero fields other modules read: name, elite, boss, party, leader,
  *  state, loot, lure, channel {kind,t,max} (t counts UP from 0 to max),
- *  abilityT, abilityCd, heartDmg, target, face, animT, path, pathIdx.
+ *  abilityT, abilityCd, heartDmg, target, face, animT, path, pathIdx, and
+ *  leaving (true while retreating / escaping with loot / giving up — heading OUT,
+ *  independent of transient states like 'stunned' or 'fight'; Traps' teleporter
+ *  skips such heroes).
  *
  *  Sections
  *    1. Tuning              6. Pathing               11. Channels
@@ -2782,13 +2858,15 @@ const Heroes = (() => {
     sepMax: 0.05,                    // max separation displacement per tick (no violent shoves)
     sepTwist: 0.42,                  // lateral bias so heroes meeting head-on slide past each other
     queueR: 0.56,                    // slow down behind a stationary ally within this distance
-    rushSpeed: 1.25, chargeSpeed: 1.3, fleeSpeed: 1.1, timeWarp: 0.85, cursedGold: 0.6,
+    rushSpeed: 1.25, chargeSpeed: 1.3, fleeSpeed: 1.1, timeWarp: 0.75, cursedGold: 0.6,
     stuckWindow: 1, stuckMove: 0.12,
     // Strategy
     rushDist: 6, rushExit: 9,        // Path.heartDist hysteresis for the final rush
-    retreatPct: 0.3, recoverPct: 0.65, retreatMinDist: 6,
+    retreatPct: 0.3, retreatPctPerWave: 0.009, retreatPctMin: 0.12, recoverPct: 0.65, retreatMinDist: 6,
     healerSeekR: 8,                  // retreating heroes fall back to a Cleric this close…
-    tendR: 7, tendMax: 15,           // …who holds position (≤ tendMax s) while they come to it
+    tendR: 7, tendMax: 15,           // …who holds position (≤ tendMax s) while they come to it,
+    tendHardMax: 45,                 // (longer while actually treating them, never beyond this)
+    healStall: 6,                    // a patient whose HP hasn't risen for this long stops waiting
     heartReach: 1.3, heartReachRanged: 2.5,
     heartCrowdReach: 2.8,            // mobbed Heart: strike over allies' shoulders from this close
     slotSeekR: 3.5,                  // stalled this close to the Heart → walk round to a free side
@@ -2811,7 +2889,7 @@ const Heroes = (() => {
     lureEvery: 0.5, lureMaxPath: 3,  // lure path may be at most radius × this long
     lootTime: 1.2, lootReach: 1.05, lureTimeout: 20,
     // Kits
-    detectEvery: 1, revealEvery: 0.25, lohRange: 4,
+    detectEvery: 0.25, revealEvery: 0.25, lohRange: 4,   // (detect is a per-SECOND chance)
     // Hero bosses
     bashR: 1.8, bashMul: 2.5, bashStun: 2,
     blinkR: 4, blinkMinGain: 3,
@@ -3049,12 +3127,19 @@ const Heroes = (() => {
     prepCost(h, ai.gk);
     let p = Path.astar(h.x, h.y, ai.gx, ai.gy, ai.cost);
     if (!p && ai.cDig !== 1) {
-      // Sealed in (e.g. by a Collapse around us): claw through rubble, or failing
-      // that hack through player walls (never rock) — a hero can always get out.
-      ai.cDig = 2; ai.cDigCost = K.rubbleCost;
-      p = Path.astar(h.x, h.y, ai.gx, ai.gy, ai.cost);
-      if (!p) { ai.cDig = 3; p = Path.astar(h.x, h.y, ai.gx, ai.gy, ai.cost); }
-      if (!p) ai.cDig = 0;
+      if (dropUnreachableGoal(h)) {
+        // A monster / chest / healer / Heart-side slot we can't reach (sealed pocket): give it up.
+        ai.pathVer = S.pathVersion; ai.dangerVer = S.dangerVersion; ai.trapVer = trapVer; ai.lastRepath = S.time;
+        return true;
+      }
+      if (!isFinite(Path.heartDist(h.x, h.y))) {
+        // WE are sealed in (e.g. by a Collapse around us): claw through rubble, or failing
+        // that hack through player walls (never rock) — a hero can always get out.
+        ai.cDig = 2; ai.cDigCost = K.rubbleCost;
+        p = Path.astar(h.x, h.y, ai.gx, ai.gy, ai.cost);
+        if (!p) { ai.cDig = 3; p = Path.astar(h.x, h.y, ai.gx, ai.gy, ai.cost); }
+        if (!p) ai.cDig = 0;
+      }
     }
     ai.pathVer = S.pathVersion; ai.dangerVer = S.dangerVersion; ai.trapVer = trapVer;
     ai.lastRepath = S.time;
@@ -3075,6 +3160,25 @@ const Heroes = (() => {
     h.path = p || [];
     h.pathIdx = 0;
     ai.noPath = !p;
+    return true;
+  }
+
+  /**
+   * A moving/side goal (monster to chase, lure, healer, Heart-side slot) that has no
+   * route at all — it sits in a sealed pocket. Give it up rather than tunnel to it.
+   * @returns true if the goal was dropped.
+   */
+  function dropUnreachableGoal(h) {
+    const ai = h.ai;
+    switch (ai.gk) {
+      case 'fight': if (ai.engage) { ignoreMonster(h, ai.engage, K.noDmgIgnore); clearEngage(h); } break;
+      case 'lure': releaseLure(h); break;
+      case 'healer': ai.healer = null; ai.noHealer = true; break;
+      case 'slot': ai.slot = null; break;
+      default: return false;
+    }
+    ai.gk = ''; ai.noPath = false;
+    h.path = null; ai.repathT = 0;
     return true;
   }
 
@@ -3135,7 +3239,7 @@ const Heroes = (() => {
       for (let dy = -r; dy <= r; dy++) for (let dx = -r; dx <= r; dx++) {
         if (Math.max(Math.abs(dx), Math.abs(dy)) !== r) continue;
         const x = tx + dx, y = ty + dy;
-        if (Grid.isSolid(x, y) || Grid.barricadeAt(x, y)) continue;
+        if (Grid.isSolid(x, y) || Grid.barricadeAt(x, y) || (x === S.heart.x && y === S.heart.y)) continue;
         const d = dist(h.x, h.y, x + 0.5, y + 0.5);
         if (d < bd) { bd = d; bx = x; by = y; }
       }
@@ -3299,6 +3403,13 @@ const Heroes = (() => {
    */
   function stallCheck(h, dt) {
     const ai = h.ai;
+    // A deliberate change of intent (held ≥ 1.5 s: e.g. advance → retreat) starts a fresh
+    // window; rapid flip-flopping does not, so it still gets caught.
+    ai.intentT += dt;
+    if (h.state !== ai.intentState || ai.gk !== ai.intentGk) {
+      if (ai.intentT >= 1.5) { ai.stallWin = 0; ai.stallT = 0; ai.stallX = h.x; ai.stallY = h.y; }
+      ai.intentState = h.state; ai.intentGk = ai.gk; ai.intentT = 0;
+    }
     ai.stallWin += dt;
     if (ai.wantMove && !ai.engage && !h.channel && !ai.atHeart) ai.stallT += dt;
     if (ai.stallWin < K.stallWindow) return;
@@ -3320,7 +3431,7 @@ const Heroes = (() => {
    */
   function watchdog(h, dt) {
     const ai = h.ai;
-    if (ai.engage || h.channel || ai.atHeart || ai.smash) { ai.wdT = 0; ai.wdX = h.x; ai.wdY = h.y; return; }
+    if (ai.engage || h.channel || ai.atHeart || ai.smash || ai.tending || ai.byHealer) { ai.wdT = 0; ai.wdX = h.x; ai.wdY = h.y; return; }
     if ((ai.wdT += dt) < K.watchdogWindow) return;
     const moved = Math.hypot(h.x - ai.wdX, h.y - ai.wdY);
     ai.wdT = 0; ai.wdX = h.x; ai.wdY = h.y;
@@ -3342,6 +3453,7 @@ const Heroes = (() => {
     const ai = h.ai;
     ai.teleports++;
     ai.atHeart = false; ai.rushing = false; ai.slot = null;
+    ai.stallWin = 0; ai.stallT = 0; ai.stallX = h.x; ai.stallY = h.y;
     h.path = null; ai.repathT = 0;
     if (!h.boss && !ai.gaveUp && ai.teleports >= K.teleportGiveUp) {
       ai.gaveUp = true;
@@ -3358,14 +3470,13 @@ const Heroes = (() => {
    *    'attacked' (fight back) · 'charge' (Warrior/Paladin) · 'range' (snipe) ·
    *    'melee' (something within reach)
    * ------------------------------------------------------------------------ */
+  /** Nearest fightable, non-ignored monster within r (optionally in line of sight). */
   function nearestMonster(h, r, pred, needLos) {
-    const ai = h.ai;
     let best = null, bd = r * r;
     for (const m of S.monsters) {
       if (!monsterOk(m) || (pred && !pred(m))) continue;
       const dx = m.x - h.x, dy = m.y - h.y, d2 = dx * dx + dy * dy;
-      if (d2 > bd) continue;
-      if (ignored(h, m)) continue;
+      if (d2 > bd || ignored(h, m)) continue;
       if (needLos && !Grid.los(h.x, h.y, m.x, m.y)) continue;
       bd = d2; best = m;
     }
@@ -3424,7 +3535,7 @@ const Heroes = (() => {
     if (m && !monsterOk(m)) { clearEngage(h); m = null; }
     // Orcish Warcry: heroes near an Orc MUST fight it.
     if (hasPerk('warcry')) {
-      const orc = nearestMonster(h, K.tauntR, predOrc, false);
+      const orc = nearestMonster(h, K.tauntR, predOrc, true); // must SEE the Orc (no taunts through walls)
       if (orc) {
         if (m !== orc || ai.engageKind !== 'taunt') { cancelChannel(h); ai.atHeart = false; setEngage(h, orc, 'taunt'); }
         return;
@@ -3762,7 +3873,8 @@ const Heroes = (() => {
     const mode = h.ai.cDig, rubble = Grid.tile(x, y).rubble;
     const time = mode === 1 ? digTimeOf(h) : rubble ? K.rubbleDigTime : K.sealedDigTime;
     startChannel(h, 'dig', time * (mode !== 1 && hasPerk('reinforced') ? 2 : 1), x, y, null);
-    h.channel.rubble = mode !== 1;          // "clawing out" rather than a miner's tunnel
+    h.channel.rubble = mode !== 1;          // sealed in and getting out, not a miner's tunnel…
+    h.channel.hack = mode !== 1 && !rubble; // …through a player wall rather than rubble
   }
 
   /** Rogue: known armed trap on the next tile → roll once; success = channel a disarm. */
@@ -3815,9 +3927,14 @@ const Heroes = (() => {
     return null;
   }
 
-  /** Rogue: each second, a chance to spot each hidden trap nearby. */
+  /**
+   * Rogue: a chance to spot each hidden trap nearby. cls.detect is per second; it is
+   * sampled every detectEvery s at the equivalent per-check chance (a rogue crosses
+   * the detection radius in well under a second).
+   */
   function rogueDetect(h, c) {
-    const p = (c.detect || 0) * (hasPerk('hidden_depths') ? 0.5 : 1);
+    const perSec = clamp((c.detect || 0) * (hasPerk('hidden_depths') ? 0.5 : 1), 0, 1);
+    const p = 1 - Math.pow(1 - perSec, K.detectEvery);
     const r2 = (c.detectR || 2) * (c.detectR || 2);
     for (const s of S.structs) {
       if (s.cat !== 'trap' || !s.hidden || s.revealed || s.broken || s.disarmed) continue;
@@ -3895,16 +4012,28 @@ const Heroes = (() => {
    * Retreating heroes look for a Cleric (any party) that is not deeper in the
    * dungeon than they are, and fall back to it to be healed.
    */
-  function findHealer(h) {
-    let best = null, bd = K.healerSeekR * K.healerSeekR;
+  function findHealer(h, r) {
+    let best = null, bd = r * r;
     for (const o of S.heroes) {
-      if (o === h || o.type !== 'cleric' || !alive(o) || !o.ai) continue;
-      if (o.ai.retreating || o.ai.escaping || o.st.fearT > 0) continue;
+      if (o === h || !healerUsable(h, o, r)) continue;
       if (!(o.ai.hd >= h.ai.hd - 2)) continue;
       const dx = o.x - h.x, dy = o.y - h.y, d2 = dx * dx + dy * dy;
       if (d2 <= bd) { bd = d2; best = o; }
     }
     return best;
+  }
+
+  /**
+   * A Cleric that can tend to us: alive, within r, not fleeing/leaving, not rushing or
+   * at the Heart, and never deeper in the dungeon than we are (by > 3 steps) — a
+   * retreating hero must not follow a healer toward the Heart.
+   */
+  function healerUsable(h, o, r) {
+    if (!o || o.type !== 'cleric' || !alive(o) || !o.ai) return false;
+    if (o.ai.retreating || o.ai.escaping || o.ai.gaveUp || o.ai.rushing || o.ai.atHeart || o.st.fearT > 0) return false;
+    if (!(o.ai.hd >= h.ai.hd - 3)) return false;
+    const dx = o.x - h.x, dy = o.y - h.y;
+    return dx * dx + dy * dy <= r * r;
   }
 
   function kitTick(h, c, dt) {
@@ -4072,8 +4201,10 @@ const Heroes = (() => {
       cost: null, cCareful: true, cDw: 0, cTw: 0, cDig: 0, cDigCost: 0, cFear: false, cFx: 0, cFy: 0,
       // strategic flags
       rushing: false, retreating: false, escaping: false, atHeart: false, heartR: K.heartReach, fleeing: false,
-      healer: null, healerT: 0,
-      // per-tick flags (read by separation/queueing/labels)
+      healer: null, healerT: 0, healerLost: false,
+      // per-tick flags (read by separation/queueing/labels). anchored = physically busy in
+      // place (fighting, channeling, smashing, striking the Heart, stunned): heavy in
+      // separation and others queue behind; idle waiting is deliberately NOT anchored.
       anchored: false, wantMove: false, waiting: false, charging: false, smash: null,
       // combat
       engage: null, engageKind: '', anchorX: h.x, anchorY: h.y, lostT: 0, losT: 0, los: true,
@@ -4087,12 +4218,13 @@ const Heroes = (() => {
       healT: Math.random() * (c.healCd || 2), blastT: randRange(2, 5), lohUsed: false,
       disarmOk: new Set(), disarmFail: new Set(), abilityRetry: 0,
       // cohesion (and clerics tending the wounded)
-      waitT: 0, waitCd: 0, tendT: 0, tending: false,
+      waitT: 0, waitCd: 0, tendT: 0, tending: false, byHealer: false, healHp: 0, healWaitT: 0,
       // movement bookkeeping
       sx: 0, sy: 0, queueT: 0, pushT: 0, crowdT: 0, slot: null, tickX: h.x, tickY: h.y, netMove: 0,
       stuckWin: 0, stuckAcc: 0, stuckN: 0, lastPX: h.x, lastPY: h.y,
       // anti-stall / route commitment / teleport loops
       switchT: -99, plainT: 0, stallWin: 0, stallT: 0, stallX: h.x, stallY: h.y, stalls: 0,
+      intentState: '', intentGk: '', intentT: 0,
       teleports: 0, gaveUp: false, blinkT: -99,
       wdT: 0, wdX: h.x, wdY: h.y, wdStrikes: 0, noHealer: false,
     };
@@ -4119,12 +4251,15 @@ const Heroes = (() => {
     const ai = h.ai;
     if (h.boss || ai.escaping || ai.gaveUp) { ai.retreating = false; return; }
     if (!ai.retreating) {
-      if (!ai.rushing && !ai.atHeart && h.hp < K.retreatPct * h.maxHp && ai.hd > K.retreatMinDist) {
+      // Later waves are braver: the retreat threshold falls from 30% HP to 12% by wave ~21, so a
+      // deadly dungeon can't simply scare every party away late in a run.
+      const flee = Math.max(K.retreatPctMin, K.retreatPct - K.retreatPctPerWave * (S.wave - 1));
+      if (!ai.rushing && !ai.atHeart && h.hp < flee * h.maxHp && ai.hd > K.retreatMinDist) {
         ai.retreating = true;
         releaseLure(h);
         cancelChannel(h);
         if (ai.engage && ai.engageKind !== 'block' && ai.engageKind !== 'taunt') clearEngage(h);
-        ai.healerT = 0;
+        ai.healerT = 0; ai.healer = null; ai.healerLost = false; ai.noHealer = false;
         h.path = null; ai.repathT = 0;
         FX.text(h.x, h.y - 1, 'Fall back!', '#ffd0a0', { size: 10 });
       }
@@ -4141,15 +4276,19 @@ const Heroes = (() => {
    */
   function tendWounded(h, dt) {
     const ai = h.ai;
-    let need = false;
+    let need = false, treating = false;
     for (const o of S.heroes) {
       if (o === h || !alive(o) || !o.ai || !o.ai.retreating || o.ai.healer !== h) continue;
-      const dx = o.x - h.x, dy = o.y - h.y;
-      if (dx * dx + dy * dy <= K.tendR * K.tendR) { need = true; break; }
+      const dx = o.x - h.x, dy = o.y - h.y, d2 = dx * dx + dy * dy;
+      if (d2 > K.tendR * K.tendR) continue;
+      need = true;
+      // patient at our side, still hurt, and we can actually reach it with a heal
+      if (d2 <= 4 && o.hp < K.recoverPct * o.maxHp && Grid.los(h.x, h.y, o.x, o.y)) treating = true;
     }
     if (!need) { ai.tendT = 0; return false; }
     ai.tendT += dt;
-    return ai.tendT < K.tendMax;
+    // The soft cap only applies while the patient is still coming; never beyond the hard cap.
+    return ai.tendT < K.tendHardMax && (ai.tendT < K.tendMax || treating);
   }
 
   /** A party member that is marching with the group (not fleeing, retreating, escaping or rushing). */
@@ -4195,10 +4334,25 @@ const Heroes = (() => {
     // Retreating (to a healer or out) / escaping with treasure / giving up.
     if (ai.escaping || ai.retreating || ai.gaveUp) {
       if (ai.retreating && !ai.escaping && !ai.gaveUp) {
-        if ((ai.healerT -= dt) <= 0) { ai.healerT = 0.5; ai.healer = ai.noHealer ? null : findHealer(h); }
+        if ((ai.healerT -= dt) <= 0) {
+          ai.healerT = 0.5;
+          // Sticky choice: keep a healer while it stays usable; re-acquire only well inside range.
+          if (!healerUsable(h, ai.healer, K.healerSeekR + 3)) {
+            const had = !!ai.healer;
+            ai.healer = ai.noHealer ? null : findHealer(h, had || ai.healerLost ? K.healerSeekR - 2 : K.healerSeekR);
+            if (had && !ai.healer) ai.healerLost = true;
+          }
+        }
         const hl = ai.healer;
         if (hl && alive(hl)) {
-          if (dist(h.x, h.y, hl.x, hl.y) <= 1.3) { ai.anchored = true; faceToward(h, hl.x); opportunistic(h, c); return; }
+          // Standing by the healer (not "anchored": allies can jostle past a field hospital).
+          if (dist(h.x, h.y, hl.x, hl.y) <= 1.3 && Grid.los(h.x, h.y, hl.x, hl.y)) {
+            // Being treated: stay while our HP keeps rising; if it stalls (healer busy
+            // elsewhere, can't reach us…) give up on healers and head out.
+            if (h.hp > ai.healHp + 0.5) { ai.healHp = h.hp; ai.healWaitT = 0; } else ai.healWaitT += dt;
+            if (ai.healWaitT > K.healStall) { ai.healer = null; ai.noHealer = true; }
+            else { ai.byHealer = true; faceToward(h, hl.x); opportunistic(h, c); return; }
+          } else { ai.healHp = h.hp; ai.healWaitT = 0; }
           setGoal(h, Math.floor(hl.x), Math.floor(hl.y), 'healer', true);
           follow(h, speedOf(h, 1), dt, 'exit');
           opportunistic(h, c);
@@ -4222,8 +4376,9 @@ const Heroes = (() => {
     if (!ai.rushing) {
       if (greedTick(h, c)) return;
       if (h.type === 'mage' && ai.blastT <= 0 && blastEvalFree && tryBlast(h, c)) return;
-      if (h.type === 'cleric' && tendWounded(h, dt)) { ai.waiting = true; ai.tending = true; ai.anchored = true; opportunistic(h, c); return; }
-      if (cohesionWait(h, dt)) { ai.waiting = true; ai.anchored = true; opportunistic(h, c); return; }
+      // Idle waits are soft (not "anchored"): whoever comes through can nudge us aside.
+      if (h.type === 'cleric' && tendWounded(h, dt)) { ai.waiting = true; ai.tending = true; opportunistic(h, c); return; }
+      if (cohesionWait(h, dt)) { ai.waiting = true; opportunistic(h, c); return; }
     }
     const g = (h.party && h.party.goal) || S.heart;
     const spd = speedOf(h, 1);
@@ -4300,13 +4455,14 @@ const Heroes = (() => {
     if ((ai.slipT -= dt) <= 0) { ai.slipT = K.slipEvery; ai.slip = chance(K.slipChance); }
     if (ai.plainT > 0) ai.plainT -= dt;
     if (h.boss && h.abilityT > 0) h.abilityT = Math.max(0, h.abilityT - dt);
-    ai.anchored = false; ai.wantMove = false; ai.waiting = false; ai.tending = false; ai.charging = false; ai.smash = null;
+    ai.anchored = false; ai.wantMove = false; ai.waiting = false; ai.tending = false; ai.byHealer = false; ai.charging = false; ai.smash = null;
     h.moving = false;
     ai.netMove = Math.hypot(h.x - ai.tickX, h.y - ai.tickY);   // last step's net motion (incl. shoves)
     ai.tickX = h.x; ai.tickY = h.y;
     if (ai.netMove > 2 && onEntrance(h) && S.time - ai.blinkT > 0.1) onTeleported(h);
     ensureOpen(h);
     ai.hd = Path.heartDist(h.x, h.y);
+    h.leaving = !!(ai.retreating || ai.escaping || ai.gaveUp);
 
     // ---- incapacitated / terrified
     if (st.stunT > 0) { cancelChannel(h); ai.anchored = true; h.state = 'stunned'; return; }
@@ -4325,7 +4481,11 @@ const Heroes = (() => {
     else if (ai.atHeart) heartTick(h, c);
     else moveTick(h, c, dt);
 
-    if (alive(h)) { h.state = deriveState(h); stuckCheck(h, dt); stallCheck(h, dt); watchdog(h, dt); }
+    if (alive(h)) {
+      h.state = deriveState(h);
+      h.leaving = !!(ai.retreating || ai.escaping || ai.gaveUp);
+      stuckCheck(h, dt); stallCheck(h, dt); watchdog(h, dt);
+    }
   }
 
   function promote(p) {
@@ -4353,15 +4513,10 @@ const Heroes = (() => {
     if (bossId) cls = HERO_BOSSES[bossId].base;
     if (!HERO_CLASSES[cls]) cls = 'warrior';
     const c = HERO_CLASSES[cls];
-    const w = Math.max(1, S.wave || 1);
-    // Wave scaling: core's heroWaveScale (linear + gentle compounding, shared with the UI preview).
-    const sc = typeof heroWaveScale === 'function' ? heroWaveScale(w)
-      : { hp: 1 + CFG.heroHpPerWave * (w - 1), dmg: 1 + CFG.heroDmgPerWave * (w - 1) };
-    let hpM = sc.hp, dmgM = sc.dmg, spdM = 1;
     const elite = !!opts.elite;
-    if (elite) { hpM *= CFG.eliteHpMul; dmgM *= CFG.eliteDmgMul; spdM *= CFG.eliteSpeedMul; }
-    if (bossId) { const b = HERO_BOSSES[bossId]; hpM *= b.hpMul; dmgM *= b.dmgMul; spdM *= b.speedMul; }
-    if (hasPerk('midas')) hpM *= 1.2;
+    // Core's single source of truth (wave scaling, elite, hero boss, Midas) — shared with the UI preview.
+    const mul = heroStatMuls({ elite, boss: bossId }, Math.max(1, S.wave || 1));
+    const hpM = mul.hp, dmgM = mul.dmg, spdM = mul.spd;
     const h = makeEntity('hero', cls, S.entrance.x + 0.5, S.entrance.y + 0.5);
     h.maxHp = h.hp = Math.max(1, Math.round(c.hp * hpM));
     h.dmg = c.dmg * dmgM;
@@ -4384,6 +4539,7 @@ const Heroes = (() => {
     h.abilityT = bossId ? h.abilityCd * 0.5 : 0;
     h.abilityName = bossId ? HERO_BOSSES[bossId].ability : null;
     h.escaped = false;
+    h.leaving = false;
     h.moving = false;
     h.smart = heroSmartness(h.elite);
     initAI(h);
@@ -4454,13 +4610,14 @@ const Heroes = (() => {
 
   /**
    * Paladin's Lay on Hands: a living Paladin within 4 tiles that hasn't used it
-   * this wave saves the dying hero (itself included) at lohPct × maxHp.
+   * this wave saves a dying ALLY (never itself) at lohPct × maxHp.
    * @returns true if the death was prevented.
    */
   function preventDeath(h) {
     if (!S || !h || h.team !== 'hero' || h.dead) return false;
     let best = null, bd = K.lohRange * K.lohRange;
     for (const p of S.heroes) {
+      if (p === h) continue;                                  // Lay on Hands saves allies, not the Paladin
       if (p.type !== 'paladin' || !alive(p) || !p.ai || p.ai.lohUsed) continue;
       const dx = p.x - h.x, dy = p.y - h.y, d2 = dx * dx + dy * dy;
       if (d2 <= bd) { bd = d2; best = p; }
@@ -4469,7 +4626,7 @@ const Heroes = (() => {
     best.ai.lohUsed = true;
     h.hp = Math.max(1, Math.round(h.maxHp * (HERO_CLASSES.paladin.lohPct || 0.5)));
     h.st.burnT = 0; h.st.bleedT = 0;   // the saved hero is also purged of lingering wounds
-    if (best !== h) FX.beam(best.x, best.y - 0.4, h.x, h.y - 0.2, { color: '#ffe680', width: 4, life: 0.5 });
+    FX.beam(best.x, best.y - 0.4, h.x, h.y - 0.2, { color: '#ffe680', width: 4, life: 0.5 });
     FX.ring(h.x, h.y, { color: '#ffe680', r0: 0.2, r1: 1.4, life: 0.6, width: 4 });
     FX.burst(h.x, h.y - 0.2, { n: 24, colors: ['#ffe680', '#ffffff', '#fff3a0'], speed: 2.4, life: 0.8, size: 2.5, grav: -3, glow: true });
     FX.text(h.x, h.y - 1.2, 'Lay on Hands!', '#ffe680', { size: 12 });
@@ -4502,7 +4659,9 @@ const Heroes = (() => {
       case 'retreat':
         if (ai.gaveUp) return 'Giving up on this cursed maze';
         return ai.healer && alive(ai.healer) ? 'Falling back to the healer' : 'Retreating to the exit';
-      case 'dig': return h.channel && h.channel.rubble ? 'Clawing through rubble' : 'Digging through a wall';
+      case 'dig':
+        if (h.channel && h.channel.hack) return 'Hacking through a wall';
+        return h.channel && h.channel.rubble ? 'Clawing through rubble' : 'Digging through a wall';
       case 'disarm': return h.channel && h.channel.jam ? 'Jamming the teleporter' : LABELS.disarm;
       case 'rush': return ai.smash ? 'Smashing a barricade' : LABELS.rush;
       default:
@@ -4593,7 +4752,7 @@ const Traps = (() => {
   const BLEED_OPT = { dps: BLEED_DPS, dur: BLEED_DUR, src: SRC.spike };
 
   /* ---- 1.3 Numbers (level + perks) -----------------------------------------
-   * These are the values the simulation uses. Glass Cannon (+60% trap damage)
+   * These are the values the simulation uses. Glass Cannon (+40% trap damage)
    * is applied by core Combat.damage, so it only shows up in stats().        */
   /** Per-level value: arrays are [L1, L2, L3]; scalars apply to every level. */
   const lv = (v, L) => (Array.isArray(v) ? v[L >= 3 ? 2 : L >= 2 ? 1 : 0] : v);
@@ -4601,6 +4760,7 @@ const Traps = (() => {
     let c = lv(TRAPS[id].cd, L) || 0;
     if (id === 'arrow' && hasPerk('quick_reload')) c *= 0.7;
     if (id === 'boulder' && hasPerk('stonemason')) c *= 0.75;
+    if (hasPerk('trapmaster')) c *= 0.8;
     return c;
   }
   function damage(id, L) {
@@ -4624,7 +4784,7 @@ const Traps = (() => {
   function stats(id, level) {
     if (!TRAPS[id]) return {};
     const L = level || 1;
-    const g = hasPerk('glass_cannon') ? 1.6 : 1;
+    const g = hasPerk('glass_cannon') ? 1.4 : 1;
     const r2 = v => Math.round(v * 100) / 100;
     const hidden = isHiddenType(id);
     switch (id) {
@@ -5023,7 +5183,7 @@ const Traps = (() => {
     let n = 0;
     for (let k = firstOn(x, y); k >= 0; k = occ.next[k]) {
       const h = occ.list[k];
-      if (!liveOn(h, x, y) || NO_TELEPORT[h.state] || h.st.fearT > 0) continue;
+      if (!liveOn(h, x, y) || NO_TELEPORT[h.state] || h.leaving || h.st.fearT > 0) continue;
       sendToEntrance(h);
       n++;
     }
@@ -5333,15 +5493,21 @@ const Objects = (() => {
     }
   }
 
-  /** Wave end: drop claims; lair summons are removed by Monsters.onWaveEnd. */
+  /**
+   * Wave end: drop claims (lair summons are removed by Monsters.onWaveEnd) and
+   * mend standing barricades to full HP. Smashed ones still need a repair.
+   */
   function onWaveEnd() {
+    let mended = false;
     for (const s of S.structs) {
       if (s.cat !== 'object' || !OBJECTS[s.id]) continue;
       const d = initData(s);
       s.animT = 0;
       if (s.id === 'chest') d.claimedBy = null;
       if (s.id === 'lair') { d.alive = 0; d.spawnT = FIRST_SPAWN; }
+      if (s.id === 'barricade' && !s.broken && s.maxHp && s.hp < s.maxHp) { s.hp = s.maxHp; mended = true; }
     }
+    if (mended) Path.bump(); // Path.baseCost scales with barricade HP
   }
 
   /* ---- 2.3 Lairs --------------------------------------------------------------- */
@@ -5436,7 +5602,7 @@ const Objects = (() => {
         break;
       }
       case 'barricade':
-        out.push(`HP: ${Math.ceil(s.hp || 0)}/${s.maxHp || def.hp}`, 'Heroes must smash through it');
+        out.push(`HP: ${Math.ceil(s.hp || 0)}/${s.maxHp || def.hp}`, 'Heroes must smash through it', 'Mends between waves; repair if smashed');
         if (s.broken) {
           const c = Build.repairCost(s);
           out.push(c > 0 ? `Status: Smashed — repair for ${c}g` : 'Status: Smashed — repair is free');
@@ -5470,7 +5636,11 @@ const Objects = (() => {
  *               Mimic ambushes from its chest disguise.
  *    Bosses     Minotaur Charge · Lich Raise Dead (+ shadow bolts) · Dragon Fire Breath.
  *    Extras     summon() for Necromancy / Legion / Lich / lairs, alarm() for runes.
+ *    Upkeep     a slain placed monster/boss (skeletons excepted) breaks its post at wave end and
+ *               stays down until the player repairs it (core Build.repair → revive()).
  *
+ *  Walkers treat walls, rock, standing barricades and the Heart tile as solid
+ *  (only the Wraith phases through); sight and projectiles pass over barricades.
  *  Module-private runtime state of an entity lives in `m.ai` (see makeAI); other
  *  modules only read the documented entity fields (SPEC §3.3).
  * ========================================================================== */
@@ -5485,6 +5655,8 @@ const Monsters = (() => {
   const SCAN_T = 0.2;             // target-scan cadence (staggered per monster)
   const LOS_T = 0.15;             // line-of-sight re-check cadence for the current target
   const REPATH_T = 0.35;          // min seconds between A* repaths toward a moving goal
+  const SKIP_T = 3;               // ignore a hero we could not reach for this long (unless the grid changes)
+  const STRAND_T = 1.5;           // how often a monster cut off from home re-checks the way back
   const WANDER_R = 0.8;           // idle wander radius around the post
   const RETURN_SLACK = 1.4;       // idle monsters farther than this from their anchor walk back
   const REGEN = 0.05;             // fraction of max HP regenerated per second at home
@@ -5539,7 +5711,7 @@ const Monsters = (() => {
     return n;
   }
   /** Dragon's Hoard: +10% dragon damage per Treasure Chest owned. */
-  const hoardMul = () => (hasPerk('dragons_hoard') ? 1 + 0.1 * chestCount() : 1);
+  const hoardMul = () => (hasPerk('dragons_hoard') ? 1 + 0.1 * Math.min(5, chestCount()) : 1);
   /** Adrenaline: +35% damage and speed while the Heart is below half HP. */
   const adrenalineOn = () => hasPerk('adrenaline') && S.heartHp < S.heartMax * 0.5;
 
@@ -5615,7 +5787,6 @@ const Monsters = (() => {
   const validHero = h => !!h && !h.dead && !h.removed && !h.escaped && !(h.st && h.st.invisT > 0);
   /** A hero physically present (area effects also hit invisible heroes). */
   const heroHere = h => !!h && !h.dead && !h.removed && !h.escaped;
-  const solidAt = (x, y) => Grid.isSolid(Math.floor(x), Math.floor(y));
   const busy = m => m.state === 'charge' || m.state === 'breath' || m.state === 'cast' || m.state === 'ambush';
   /** Accept either an entity or a Structure (UI may pass the selected struct). */
   const entOf = x => (!x ? null : x.team === 'dm' ? x : x.ent || null);
@@ -5625,20 +5796,81 @@ const Monsters = (() => {
     return d > Math.PI ? Math.PI * 2 - d : d;
   }
 
-  // The point a monster guards right now: its alarm rune while alarmed, else home.
-  const anchorX = m => (m.ai.alarmT > 0 ? m.ai.ax : m.homeX);
-  const anchorY = m => (m.ai.alarmT > 0 ? m.ai.ay : m.homeY);
+  // The point a monster guards right now: its alarm rune while alarmed; the spot where it was
+  // cut off while its home is unreachable; else home.
+  const anchorX = m => (m.ai.alarmT > 0 ? m.ai.ax : m.ai.stranded ? m.ai.sx : m.homeX);
+  const anchorY = m => (m.ai.alarmT > 0 ? m.ai.ay : m.ai.stranded ? m.ai.sy : m.homeY);
   function leashOf(m) {
     const base = m.post ? m.ai.k.leash : SUMMON_LEASH;
     return m.ai.alarmT > 0 ? Math.max(base, m.ai.alarmR) + 1.5 : base;
   }
   const guardOf = m => (m.post ? m.ai.k.guard : Math.max(SUMMON_GUARD, m.ai.k.guard));
 
-  /** Move to (nx,ny), sliding along walls; false when fully blocked. */
+  /** A tile a walking monster may not enter: walls, rock, the Heart, standing barricades. */
+  function blockedTile(tx, ty) {
+    if (Grid.isSolid(tx, ty)) return true;
+    const t = S.tiles[ty * S.cols + tx];
+    if (t.type === T.HEART) return true;
+    const s = t.s;
+    return !!s && s.cat === 'object' && s.id === 'barricade' && !s.broken;
+  }
+  /** May a walker standing on tile (cx,cy) move to world point (x,y)? (its own tile is always allowed) */
+  function canStep(cx, cy, x, y) {
+    const tx = Math.floor(x), ty = Math.floor(y);
+    return (tx === cx && ty === cy) || !blockedTile(tx, ty);
+  }
+  /** Move to (nx,ny), sliding along obstacles; false when fully blocked. */
   function tryMove(e, nx, ny) {
-    if (!solidAt(nx, ny)) { e.x = nx; e.y = ny; return true; }
-    if (!solidAt(nx, e.y)) { e.x = nx; return true; }
-    if (!solidAt(e.x, ny)) { e.y = ny; return true; }
+    const cx = Math.floor(e.x), cy = Math.floor(e.y);
+    if (canStep(cx, cy, nx, ny)) { e.x = nx; e.y = ny; return true; }
+    if (canStep(cx, cy, nx, e.y)) { e.x = nx; return true; }
+    if (canStep(cx, cy, e.x, ny)) { e.y = ny; return true; }
+    return false;
+  }
+
+  // A* cost for walkers: 1 per open tile, Infinity through obstacles. The goal tile is exempt from
+  // the non-solid blockers so a monster can still path *toward* a foe standing by the Heart.
+  let pathGoal = -1;
+  function walkCost(x, y, i) {
+    const t = S.tiles[i];
+    if (t.type === T.WALL || t.type === T.ROCK) return Infinity;
+    if (i !== pathGoal && blockedTile(x, y)) return Infinity;
+    return 1;
+  }
+  function findPath(sx, sy, gtx, gty) {
+    pathGoal = Grid.inb(gtx, gty) ? gty * S.cols + gtx : -1;
+    const p = Path.astar(sx, sy, gtx, gty, walkCost);
+    pathGoal = -1;
+    return p;
+  }
+
+  /** Does segment A→B pass through the box [x0,x1]×[y0,y1]? (slab test) */
+  function segHitsBox(ax, ay, bx, by, x0, y0, x1, y1) {
+    let t0 = 0, t1 = 1;
+    const dx = bx - ax, dy = by - ay;
+    if (Math.abs(dx) < 1e-9) { if (ax < x0 || ax > x1) return false; }
+    else {
+      let ta = (x0 - ax) / dx, tb = (x1 - ax) / dx;
+      if (ta > tb) { const q = ta; ta = tb; tb = q; }
+      if ((t0 = Math.max(t0, ta)) > (t1 = Math.min(t1, tb))) return false;
+    }
+    if (Math.abs(dy) < 1e-9) return ay >= y0 && ay <= y1;
+    let ta = (y0 - ay) / dy, tb = (y1 - ay) / dy;
+    if (ta > tb) { const q = ta; ta = tb; tb = q; }
+    return Math.max(t0, ta) <= Math.min(t1, tb);
+  }
+  /**
+   * Is a standing barricade (or the Heart) in the way of A→B, widened by `margin`?
+   * Walls are covered by Grid.los; the start and end tiles are ignored.
+   */
+  function blockerBetween(ax, ay, bx, by, margin) {
+    const sx = Math.floor(ax), sy = Math.floor(ay), ex = Math.floor(bx), ey = Math.floor(by);
+    const x0 = Math.floor(Math.min(ax, bx) - margin), x1 = Math.floor(Math.max(ax, bx) + margin);
+    const y0 = Math.floor(Math.min(ay, by) - margin), y1 = Math.floor(Math.max(ay, by) + margin);
+    for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) {
+      if ((x === sx && y === sy) || (x === ex && y === ey) || !Grid.inb(x, y) || Grid.isSolid(x, y) || !blockedTile(x, y)) continue;
+      if (segHitsBox(ax, ay, bx, by, x - margin, y - margin, x + 1 + margin, y + 1 + margin)) return true;
+    }
     return false;
   }
 
@@ -5655,13 +5887,14 @@ const Monsters = (() => {
     return d - s <= stop + 1e-3;
   }
 
-  /** Can a walker go straight from a to b without clipping walls? (centre line + both shoulders) */
+  /** Can a walker go straight from a to b without clipping walls or barricades? (centre line + both shoulders) */
   function clearWalk(ax, ay, bx, by) {
     if (!Grid.los(ax, ay, bx, by)) return false;
     const dx = bx - ax, dy = by - ay, d = Math.sqrt(dx * dx + dy * dy);
     if (d < 0.05) return true;
     const ox = -dy / d * 0.28, oy = dx / d * 0.28;
-    return Grid.los(ax + ox, ay + oy, bx + ox, by + oy) && Grid.los(ax - ox, ay - oy, bx - ox, by - oy);
+    return Grid.los(ax + ox, ay + oy, bx + ox, by + oy) && Grid.los(ax - ox, ay - oy, bx - ox, by - oy) &&
+      !blockerBetween(ax, ay, bx, by, 0.28);
   }
 
   /**
@@ -5686,10 +5919,11 @@ const Monsters = (() => {
     const verChanged = ai.pathVer !== S.pathVersion;
     const goalMoved = ai.goalTx !== gtx || ai.goalTy !== gty;
     const exhausted = !!m.path && m.pathIdx >= m.path.length && goalMoved; // walked the old route, goal moved on
-    if ((!m.path && !ai.unreach) || verChanged || exhausted || ((goalMoved || ai.blocked || !m.path) && ai.repathT <= 0)) {
+    const fresh = !m.path && !ai.unreach;                 // no route yet (failed searches retry on the timer)
+    if (fresh || verChanged || exhausted || ((goalMoved || ai.blocked || !m.path) && ai.repathT <= 0)) {
       ai.pathVer = S.pathVersion; ai.goalTx = gtx; ai.goalTy = gty; ai.blocked = false;
       ai.repathT = REPATH_T + Math.random() * 0.25;
-      m.path = Path.astar(m.x, m.y, gtx, gty, Path.baseCost);
+      m.path = findPath(m.x, m.y, gtx, gty);
       m.pathIdx = 0;
       ai.unreach = !m.path;
     }
@@ -5698,7 +5932,9 @@ const Monsters = (() => {
     const path = m.path;
     while (step > 1e-6 && m.pathIdx < path.length) {
       const wp = path[m.pathIdx];
-      if (Grid.isSolid(wp.x, wp.y)) { ai.blocked = true; m.path = null; return true; }
+      if (wp.x !== ai.goalTx || wp.y !== ai.goalTy ? blockedTile(wp.x, wp.y) : Grid.isSolid(wp.x, wp.y)) {
+        ai.blocked = true; m.path = null; return true; // the route closed (Collapse etc.)
+      }
       const wx = wp.x + 0.5, wy = wp.y + 0.5;
       const ddx = wx - m.x, ddy = wy - m.y, d = Math.sqrt(ddx * ddx + ddy * ddy);
       if (ddx > 0.02) m.face = 1; else if (ddx < -0.02) m.face = -1;
@@ -5737,11 +5973,11 @@ const Monsters = (() => {
   /** Nearest open tile to (x,y) (the point itself if open) → SPOT. False if none within 3 tiles. */
   function openSpot(x, y) {
     const tx = Math.floor(x), ty = Math.floor(y);
-    if (Grid.inb(tx, ty) && !Grid.isSolid(tx, ty)) { SPOT.x = x; SPOT.y = y; return true; }
+    if (Grid.inb(tx, ty) && !blockedTile(tx, ty)) { SPOT.x = x; SPOT.y = y; return true; }
     let best = Infinity;
     for (let r = 1; r <= 3 && best === Infinity; r++) {
       for (let oy = -r; oy <= r; oy++) for (let ox = -r; ox <= r; ox++) {
-        if (Math.max(Math.abs(ox), Math.abs(oy)) !== r || Grid.isSolid(tx + ox, ty + oy)) continue;
+        if (Math.max(Math.abs(ox), Math.abs(oy)) !== r || blockedTile(tx + ox, ty + oy)) continue;
         const cx = tx + ox + 0.5, cy = ty + oy + 0.5, d = dist(x, y, cx, cy);
         if (d < best) { best = d; SPOT.x = cx; SPOT.y = cy; }
       }
@@ -5764,9 +6000,11 @@ const Monsters = (() => {
       k: null,                                                   // calcStats() for the current level
       src: { team: 'dm', kind, id: m.type, ent: m, elem: ELEM[m.type] || 'phys' },
       srcFire: { team: 'dm', kind, id: m.type, ent: m, elem: 'fire' },
-      scanT: Math.random() * SCAN_T, losT: 0, seen: false, lostT: 0, ignoreT: 0, alertT: 0,
+      scanT: Math.random() * SCAN_T, losT: 0, seen: false, reach: false, lostT: 0, ignoreT: 0, alertT: 0,
+      skipUid: 0, skipT: 0, skipVer: -1,                         // a hero we could not reach
+      stranded: false, sx: 0, sy: 0, strandT: 0, strandVer: -1,  // cut off from home: guard (sx,sy)
       unreach: false, blocked: false, repathT: 0, pathVer: -1, goalTx: -1, goalTy: -1,
-      wanderT: Math.random() * 2, wx: m.x, wy: m.y,
+      wanderT: Math.random() * 2, wx: m.x, wy: m.y, wax: m.x, way: m.y, // wander point & the anchor it belongs to
       alarmT: 0, ax: 0, ay: 0, alarmR: 0,
       webT: 0.5 + Math.random(), kiteT: 0, kx: NaN, ky: NaN,
       calmT: 0, lastHp: m.hp, regenFxT: 0, ambT: Math.random() * 2, hold: false,
@@ -5780,7 +6018,8 @@ const Monsters = (() => {
   /** Lock onto a hero ('!' callout the first time; bosses roar). */
   function engage(m, h) {
     const ai = m.ai, fresh = !m.target;
-    m.target = h; ai.lostT = 0; ai.seen = true; ai.losT = LOS_T; ai.unreach = false; m.path = null;
+    m.target = h; ai.lostT = 0; ai.losT = LOS_T; ai.unreach = false; ai.repathT = 0; m.path = null;
+    updateSight(m, h);
     if (!busy(m)) m.state = 'chase';
     if (fresh && ai.alertT <= 0) {
       ai.alertT = 4;
@@ -5791,8 +6030,17 @@ const Monsters = (() => {
 
   /** Stop chasing and head back (after a snapped leash, ignore heroes for a moment). */
   function giveUp(m, leashed) {
-    m.target = null; m.path = null; m.ai.lostT = 0; m.state = 'return';
-    if (leashed) m.ai.ignoreT = 1.5;
+    const ai = m.ai;
+    if (ai.unreach && m.target) { ai.skipUid = m.target.uid; ai.skipT = SKIP_T; ai.skipVer = S.pathVersion; }
+    m.target = null; m.path = null; ai.lostT = 0; ai.unreach = false; ai.repathT = 0; m.state = 'return';
+    if (leashed) ai.ignoreT = 1.5;
+  }
+
+  /** Refresh sight (walls block) and melee reach (barricades & the Heart block too; wraiths ignore them). */
+  function updateSight(m, t) {
+    const ai = m.ai;
+    ai.seen = Grid.los(m.x, m.y, t.x, t.y);
+    ai.reach = ai.seen && (m.phasing || dist(m.x, m.y, t.x, t.y) > 2 || !blockerBetween(m.x, m.y, t.x, t.y, 0));
   }
 
   /**
@@ -5806,13 +6054,14 @@ const Monsters = (() => {
     const ax = anchorX(m), ay = anchorY(m), L = leashOf(m) - 0.3;
     if ((m.x - ax) * (m.x - ax) + (m.y - ay) * (m.y - ay) > L * L) return; // too far out to start a fight
     const g = guardOf(m);
-    let cx = m.homeX, cy = m.homeY, r = g;
+    let cx = ai.stranded ? ai.sx : m.homeX, cy = ai.stranded ? ai.sy : m.homeY, r = g;
     if (provoked) { cx = m.x; cy = m.y; r = Math.max(g + 2, 6); }
     else if (ai.alarmT > 0) { cx = m.x; cy = m.y; r = g + 1; }
     const r2 = r * r, needLos = !m.phasing && !!m.post;
     let best = null, bd = Infinity;
+    const skip = ai.skipT > 0 && ai.skipVer === S.pathVersion ? ai.skipUid : 0;
     for (const h of S.heroes) {
-      if (!validHero(h)) continue;
+      if (!validHero(h) || h.uid === skip) continue;
       const hx = h.x - cx, hy = h.y - cy;
       if (hx * hx + hy * hy > r2) continue;
       const mx = h.x - m.x, my = h.y - m.y, d2 = mx * mx + my * my;
@@ -5833,10 +6082,10 @@ const Monsters = (() => {
   function keepTarget(m, dt) {
     const t = m.target, ai = m.ai;
     if (!t) return;
-    if (!validHero(t)) { m.target = null; ai.lostT = 0; ai.scanT = 0; return; }
+    if (!validHero(t)) { m.target = null; ai.lostT = 0; ai.scanT = 0; ai.unreach = false; ai.repathT = 0; return; }
     const ax = anchorX(m), ay = anchorY(m), L = leashOf(m);
     if ((m.x - ax) * (m.x - ax) + (m.y - ay) * (m.y - ay) > L * L) { giveUp(m, true); return; }
-    if ((ai.losT -= dt) <= 0) { ai.losT = LOS_T; ai.seen = Grid.los(m.x, m.y, t.x, t.y); }
+    if ((ai.losT -= dt) <= 0) { ai.losT = LOS_T; updateSight(m, t); }
     // Placed walkers lose foes they cannot see; anyone loses foes they cannot reach
     // (ranged ones only if they cannot shoot them either).
     const shootable = ai.k.ranged && ai.seen && dist(m.x, m.y, t.x, t.y) <= m.range;
@@ -5961,18 +6210,18 @@ const Monsters = (() => {
     if (m.type === 'spider') trySpiderWeb(m);
     const dx = t.x - m.x, dy = t.y - m.y, d = Math.sqrt(dx * dx + dy * dy);
     const stand = m.isBoss ? STAND_BOSS : STAND_MELEE;
-    const onOpen = !m.phasing || !solidAt(m.x, m.y); // wraiths never fight from inside a wall
+    const onOpen = !m.phasing || !blockedTile(Math.floor(m.x), Math.floor(m.y)); // wraiths never fight from inside a wall
     // Dragon: with the breath about to be ready, rear up at range so the cone catches the whole group.
     ai.hold = m.type === 'dragon' && m.abilityT > 0 && m.abilityT <= BREATH.holdT && ai.seen &&
       d > m.range && d <= ai.k.breathLen;
     if (ai.hold) { m.state = 'chase'; m.face = dx >= 0 ? 1 : -1; return; }
-    if (d <= m.range && ai.seen && onOpen) {
+    if (d <= m.range && ai.reach && onOpen) {
       m.state = 'attack';
       if (d > stand) steer(m, t.x, t.y, moveSpeed(m) * dt, stand, false); // no phasing while striking
       if (m.atkT <= 0) melee(m, t);
     } else {
       m.state = 'chase';
-      approach(m, t.x, t.y, dt, ai.seen && onOpen ? stand : (m.phasing ? 0.3 : 0));
+      approach(m, t.x, t.y, dt, ai.reach && onOpen ? stand : (m.phasing ? 0.3 : 0));
     }
   }
 
@@ -6011,8 +6260,8 @@ const Monsters = (() => {
       let bestS = dist(m.x, m.y, t.x, t.y) + 0.15, bx = NaN, by = NaN;
       for (let i = 0; i < 8; i++) {
         const ox = DIRS8[i][0], oy = DIRS8[i][1], nx = tx + ox, ny = ty + oy;
-        if (Grid.isSolid(nx, ny) || Grid.barricadeAt(nx, ny)) continue;
-        if (ox && oy && (Grid.isSolid(tx + ox, ty) || Grid.isSolid(tx, ty + oy))) continue; // no corner cutting
+        if (blockedTile(nx, ny)) continue;
+        if (ox && oy && (blockedTile(tx + ox, ty) || blockedTile(tx, ty + oy))) continue; // no corner cutting
         const cx = nx + 0.5, cy = ny + 0.5;
         if (dist(cx, cy, ax, ay) > L) continue;
         let s = Math.min(dist(cx, cy, t.x, t.y), lo + 1);
@@ -6040,24 +6289,49 @@ const Monsters = (() => {
     const r = randRange(0.15, WANDER_R) * (m.isBoss ? 0.6 : 1), a = Math.random() * Math.PI * 2;
     const px = ax + Math.cos(a) * r, py = ay + Math.sin(a) * r;
     const tx = Math.floor(px), ty = Math.floor(py);
-    if (!Grid.isSolid(tx, ty) && !Grid.barricadeAt(tx, ty) && clearWalk(ax, ay, px, py)) { ai.wx = px; ai.wy = py; }
+    if (!blockedTile(tx, ty) && clearWalk(ax, ay, px, py)) { ai.wx = px; ai.wy = py; }
     else { ai.wx = ax; ai.wy = ay; }
+  }
+
+  /** Home is out of reach (walled/barricaded off): guard the current spot instead of pacing. */
+  function strand(m) {
+    const ai = m.ai;
+    ai.stranded = true; ai.sx = m.x; ai.sy = m.y; ai.strandT = STRAND_T; ai.strandVer = S.pathVersion;
+    m.state = 'idle'; m.path = null; ai.unreach = false;
+  }
+  /** Periodically (and whenever the grid changes) check whether the way home has reopened. */
+  function recheckHome(m, dt) {
+    const ai = m.ai;
+    if ((ai.strandT -= dt) > 0 && ai.strandVer === S.pathVersion) return;
+    ai.strandT = STRAND_T; ai.strandVer = S.pathVersion;
+    if (findPath(m.x, m.y, Math.floor(m.homeX), Math.floor(m.homeY))) {
+      ai.stranded = false; m.state = 'return'; m.path = null; ai.repathT = 0;
+    }
   }
 
   /** No foe: rush to an alarm, walk back to the anchor, or idle there (wander + regen at home). */
   function idleBehaviour(m, dt) {
-    const ai = m.ai, ax = anchorX(m), ay = anchorY(m), alarmed = ai.alarmT > 0;
+    const ai = m.ai;
+    if (ai.stranded && !m.phasing) recheckHome(m, dt);
+    const ax = anchorX(m), ay = anchorY(m), alarmed = ai.alarmT > 0;
     const d = dist(m.x, m.y, ax, ay);
-    if (alarmed && d > 0.9) { m.state = 'chase'; approach(m, ax, ay, dt, 0.6); return; }
-    if (m.state === 'chase' || m.state === 'attack') m.state = 'return';
-    const inWall = m.phasing && solidAt(m.x, m.y);
-    if (inWall || d > RETURN_SLACK || (m.state === 'return' && d > (alarmed ? 0.6 : 0.12))) {
-      m.state = 'return';
-      approach(m, ax, ay, dt, 0.05);
+    if (alarmed && d > 0.9) {
+      m.state = 'chase';
+      if (!approach(m, ax, ay, dt, 0.6) && ai.goalTx === Math.floor(ax) && ai.goalTy === Math.floor(ay)) ai.alarmT = 0; // rune out of reach: stay on guard (still enraged)
       return;
     }
-    if (m.state !== 'idle') { m.state = 'idle'; ai.wx = ax; ai.wy = ay; ai.wanderT = randRange(0.8, 2); }
-    if (!alarmed && d <= WANDER_R + 0.1) regen(m, dt);
+    if (m.state === 'chase' || m.state === 'attack') m.state = 'return';
+    const inWall = m.phasing && blockedTile(Math.floor(m.x), Math.floor(m.y));
+    if (inWall || d > RETURN_SLACK || (m.state === 'return' && d > (alarmed ? 0.6 : 0.12))) {
+      m.state = 'return';
+      // Only a failed search for this very anchor means we are cut off (not a stale failure).
+      if (!approach(m, ax, ay, dt, 0.05) && ai.goalTx === Math.floor(ax) && ai.goalTy === Math.floor(ay)) strand(m);
+      return;
+    }
+    if (m.state !== 'idle' || ai.wax !== ax || ai.way !== ay) { // (re)settling, or the anchor moved: wander afresh
+      m.state = 'idle'; ai.wax = ax; ai.way = ay; ai.wx = ax; ai.wy = ay; ai.wanderT = randRange(0.8, 2);
+    }
+    if (!alarmed && !ai.stranded && d <= WANDER_R + 0.1) regen(m, dt);
     if (m.type === 'mimic') { steer(m, ax, ay, moveSpeed(m) * dt, 0.01, false); return; } // mimics sit still
     if ((ai.wanderT -= dt) <= 0) pickWander(m, ax, ay);
     steer(m, ai.wx, ai.wy, moveSpeed(m) * 0.35 * dt, 0.02, m.phasing);
@@ -6087,7 +6361,8 @@ const Monsters = (() => {
     for (const h of S.heroes) {
       if (!validHero(h)) continue;
       const dx = h.x - m.x, dy = h.y - m.y, d2 = dx * dx + dy * dy;
-      if (d2 <= bd) { bd = d2; victim = h; }
+      if (d2 > bd || !Grid.los(m.x, m.y, h.x, h.y) || blockerBetween(m.x, m.y, h.x, h.y, 0)) continue;
+      bd = d2; victim = h;
     }
     if (victim) ambush(m, victim);
     else if (provoked) { m.disguised = false; FX.text(m.x, m.y - 0.8, '!', '#ff5a5a', { size: 12 }); }
@@ -6098,7 +6373,7 @@ const Monsters = (() => {
     const ai = m.ai;
     m.disguised = false; m.state = 'ambush'; m.target = h; m.face = h.x >= m.x ? 1 : -1;
     m.animT = MIMIC.stagger; m.atkT = m.atkCd;
-    ai.abT = MIMIC.stagger; ai.calmT = 0; ai.lostT = 0; ai.seen = true; ai.losT = LOS_T; ai.alertT = 4;
+    ai.abT = MIMIC.stagger; ai.calmT = 0; ai.lostT = 0; ai.seen = ai.reach = true; ai.losT = LOS_T; ai.alertT = 4;
     Combat.damage(h, hitDamage(m, ai.k.ambushDmg), ai.src);
     Status.apply(h, 'root', { dur: MIMIC.root });
     FX.burst(m.x, m.y, { n: 16, colors: PAL.wood, speed: 3, life: 0.6, size: 2.6, grav: 6 });
@@ -6425,8 +6700,8 @@ const Monsters = (() => {
    * ------------------------------------------------------------------------ */
   const canNudge = m => !m.dead && !m.removed && !m.disguised && m.state !== 'charge' && m.state !== 'breath' && m.state !== 'cast';
   function nudge(m, ox, oy) {
-    const nx = m.x + ox, ny = m.y + oy;
-    if (!solidAt(nx, ny)) { m.x = nx; m.y = ny; } else if (!solidAt(nx, m.y)) m.x = nx; else if (!solidAt(m.x, ny)) m.y = ny;
+    const cx = Math.floor(m.x), cy = Math.floor(m.y), nx = m.x + ox, ny = m.y + oy;
+    if (canStep(cx, cy, nx, ny)) { m.x = nx; m.y = ny; } else if (canStep(cx, cy, nx, m.y)) m.x = nx; else if (canStep(cx, cy, m.x, ny)) m.y = ny;
   }
   function separate(dt) {
     const arr = S.monsters, n = arr.length;
@@ -6461,6 +6736,7 @@ const Monsters = (() => {
     if (m.isBoss && m.abilityT > 0) m.abilityT -= dt;
     if (ai.webT > 0) ai.webT -= dt;
     if (ai.ignoreT > 0) ai.ignoreT -= dt;
+    if (ai.skipT > 0) ai.skipT -= dt;
     if (ai.alertT > 0) ai.alertT -= dt;
     if (ai.repathT > 0) ai.repathT -= dt;
     if (ai.alarmT > 0) ai.alarmT = Math.max(0, ai.alarmT - dt);
@@ -6522,6 +6798,27 @@ const Monsters = (() => {
     m.disguised = m.type === 'mimic';
     if (m.isBoss) m.abilityT = 2;
   }
+
+  /**
+   * A slain placed monster/boss at wave end: its post breaks and it stays down (remains drawn at
+   * the post) until the player pays to repair it — the monster counterpart of repairing traps.
+   */
+  function layToRest(m) {
+    m.post.broken = true;
+    m.dead = true; m.hp = 0; m.deadT = Math.max(m.deadT || 0, 1); m.respawnT = 0;
+    m.homeX = m.post.x + 0.5; m.homeY = m.post.y + 0.5;
+    m.x = m.homeX; m.y = m.homeY;
+    Object.assign(m.st, makeStatus());
+    m.state = 'idle'; m.target = null; m.path = null; m.disguised = false; m.animT = 0; m.flashT = 0;
+    if (m.ai) { m.ai.corpses.length = 0; m.ai.phase = 0; m.ai.recoverT = 0; m.ai.alarmT = 0; }
+  }
+  const postDown = m => !!m.post && !!m.post.broken;
+  /** Cost to repair a slain monster's post (core rule), or null if none applies. */
+  function reviveCost(m) {
+    if (!m.post || !m.post.broken || typeof Build === 'undefined' || !Build.repairCost) return null;
+    return Build.repairCost(m.post);
+  }
+  const costText = c => (c ? c + 'g' : 'free');
 
   /* ---------------------------------------------------------------------------
    * 12. TOOLTIP TEXT
@@ -6641,17 +6938,42 @@ const Monsters = (() => {
       }
     },
 
-    /** All placed monsters alive, healed and at their posts; bosses ready in 2 s; mimics disguised. */
+    /** Placed monsters alive, healed and at their posts; bosses ready in 2 s; mimics disguised. Broken posts stay down. */
     onWaveStart() {
       S.monsters = S.monsters.filter(m => !m.temp && !m.removed);
-      for (const m of S.monsters) resetForWave(m);
+      for (const m of S.monsters) {
+        if (postDown(m)) { if (!m.dead) layToRest(m); continue; }
+        resetForWave(m);
+      }
     },
 
-    /** Remove this wave's summons; revive and heal placed monsters at their posts. */
+    /**
+     * Remove this wave's summons. Survivors heal and return to their posts; skeletons always
+     * reassemble; any other slain placed monster or boss breaks its post and stays dead until repaired.
+     */
     onWaveEnd() {
       for (const m of S.monsters) if (m.temp) m.removed = true;
       S.monsters = S.monsters.filter(m => !m.removed);
-      for (const m of S.monsters) resetForWave(m);
+      for (const m of S.monsters) {
+        if (m.post && (m.dead || m.post.broken) && m.type !== 'skeleton') layToRest(m);
+        else resetForWave(m);
+      }
+    },
+
+    /**
+     * Bring a broken post's monster back: alive, full HP, at its post, statuses cleared, stats
+     * refreshed (called by core Build._fix when the player repairs the post). Accepts entity or Structure.
+     */
+    revive(x) {
+      const m = entOf(x);
+      if (!m || m.removed) return false;
+      if (m.post) m.post.broken = false;
+      resetForWave(m);
+      FX.burst(m.x, m.y, { n: 18, colors: m.isBoss ? (BOSS_FX[m.type] || PAL.heal) : PAL.heal, speed: 2, life: 0.7, size: 2.4, grav: -2 });
+      FX.ring(m.x, m.y, { color: '#9fe8ff', r0: 0.2, r1: m.isBoss ? 1.6 : 1.1, life: 0.5, width: 2 });
+      FX.text(m.x, m.y - (m.isBoss ? 1.2 : 0.85), m.isBoss ? `${defOf(m.type).name} rises again!` : 'Revived!', '#9fe8ff', { size: m.isBoss ? 12 : 10 });
+      if (m.isBoss) SFX.play('roar');
+      return true;
     },
 
     /** Called by core Combat.kill: skeleton reassembly timer, boss death fanfare. */
@@ -6674,7 +6996,7 @@ const Monsters = (() => {
         FX.ring(m.x, m.y, { color: '#ff5a5a', r0: 0.4, r1: 4, life: 0.9, width: 5 });
         FX.text(m.x, m.y - 1.3, `${name} falls!`, '#ff5a5a', { size: 15, life: 1.6 });
         SFX.play('boss');
-        if (typeof UI !== 'undefined' && UI.toast) UI.toast(`Your ${name} was slain${by}! It will rise again after the wave.`, 'bad');
+        if (typeof UI !== 'undefined' && UI.toast) UI.toast(`Your ${name} was slain${by}! Repair its lair after the wave to raise it again.`, 'bad');
       }
     },
 
@@ -6695,7 +7017,7 @@ const Monsters = (() => {
         FX.text(m.x, m.y - 0.9, 'Enraged!', '#ff6a4a', { size: 10 });
         if (m.disguised) continue; // mimics stay in ambush (but enraged)
         const ai = m.ai;
-        ai.alarmT = dur; ai.ax = x; ai.ay = y; ai.alarmR = radius; ai.ignoreT = 0;
+        ai.alarmT = dur; ai.ax = x; ai.ay = y; ai.alarmR = radius; ai.ignoreT = 0; ai.unreach = false; ai.repathT = 0;
         if (!m.target && !busy(m)) { m.state = 'chase'; m.path = null; }
       }
       return n;
@@ -6705,7 +7027,13 @@ const Monsters = (() => {
     stateLabel(x) {
       const m = entOf(x);
       if (!m) return '';
-      if (m.dead) return m.respawnT > 0 ? `Reassembling (${Math.ceil(m.respawnT)}s)` : 'Slain';
+      if (m.dead) {
+        if (m.respawnT > 0) return `Reassembling (${Math.ceil(m.respawnT)}s)`;
+        if (!m.post || m.temp) return 'Slain';
+        const c = reviveCost(m);
+        if (c !== null && S.phase !== 'wave') return `Slain — repair to revive (${costText(c)})`;
+        return m.type === 'skeleton' ? 'Slain' : 'Slain — repair its post after the wave';
+      }
       if (m.disguised) return 'Disguised as a chest';
       if (S.phase !== 'wave') return 'Guarding its post';
       const ai = m.ai || {};
@@ -6726,6 +7054,7 @@ const Monsters = (() => {
         case 'respawn': return 'Reassembling';
         default:
           if (ai.alarmT > 0) return 'Holding the alarm point' + enr;
+          if (ai.stranded) return 'Cut off from its post' + enr;
           return (m.post ? 'Guarding' : 'Prowling') + enr;
       }
     },
@@ -6736,6 +7065,11 @@ const Monsters = (() => {
       const k = m ? calcStats(m.type, m.level) : x && x.id ? calcStats(x.id, x.level) : null;
       if (!k) return [];
       const out = [];
+      if (m && m.dead && m.post && !m.temp && m.respawnT <= 0) {
+        const c = reviveCost(m);
+        if (c !== null && S.phase !== 'wave') out.push(`Slain — repair to revive (${costText(c)})`);
+        else if (m.type !== 'skeleton') out.push('Slain — its post must be repaired after the wave');
+      }
       if (m) out.push(`HP: ${Math.ceil(m.hp)} / ${m.maxHp}`); else out.push(`HP: ${k.hp}`);
       out.push(`Damage: ${Math.round(k.dmg)} every ${k.atkCd}s (${k.dps} DPS)`);
       out.push(`${k.ranged ? 'Range' : 'Reach'}: ${k.range} · Speed: ${k.speed}`);
@@ -7221,8 +7555,6 @@ const Waves = (() => {
     done() { return !api._queue || api._s !== S || api._queue.length === 0; },
     /** Heroes that have not spawned yet this wave. */
     remaining() { return api._queue && api._s === S ? api._left : 0; },
-    /** Seconds until the next party enters (0 if none are left). */
-    nextIn() { return api._queue && api._s === S && api._queue.length ? Math.max(0, api._timer) : 0; },
   };
   return api;
 })();
@@ -7241,8 +7573,12 @@ const Perks = (() => {
     offerable(p) {
       if (!p || !S) return false;
       if (S.perks[p.id] && !p.repeatable) return false;
-      if (p.req && !Build.isUnlocked(p.req[0], p.req[1])) return false;
-      if (p.unlocks && !p.unlocks.some(([cat, id]) => !Build.isUnlocked(cat, id))) return false;
+      // Offers are made in the reward phase, i.e. for the build phase of the NEXT wave: content whose
+      // milestone arrives then counts as unlocked (so unlock perks aren't wasted, req perks aren't late).
+      const next = S.phase === 'build' ? S.wave : S.wave + 1;
+      const ready = (cat, id) => Build.isUnlocked(cat, id) || ((contentDef(cat, id) || {}).unlock || Infinity) <= next;
+      if (p.req && !ready(p.req[0], p.req[1])) return false;
+      if (p.unlocks && !p.unlocks.some(([cat, id]) => !ready(cat, id))) return false;
       return true;
     },
     /** Every perk definition that could be offered right now. */
@@ -7381,7 +7717,6 @@ const Powers = (() => {
   const refusals = {};
   const refuse = reason => refusals[reason] || (refusals[reason] = Object.freeze({ ok: false, reason }));
 
-  const fearImmune = h => !!(HERO_CLASSES[h.type] && HERO_CLASSES[h.type].fearImmune) || !!h.boss;
   const hasPoint = (x, y) => Number.isFinite(x) && Number.isFinite(y);
   /** Any living hero within r of (x, y)? (no allocation) */
   function heroNear(x, y, r) {
@@ -7473,7 +7808,7 @@ const Powers = (() => {
         case 'fear': {
           const h = Spatial.nearestHero(wx, wy, FEAR_PICK);
           if (!h) return refuse('Pick a hero');
-          if (fearImmune(h)) return refuse('Immune to fear');
+          if (Status.fearImmune(h)) return refuse('Immune to fear');
           if (h.st.fearT > 1) return refuse('Already terrified');
           return OK;
         }
@@ -7529,7 +7864,7 @@ const Powers = (() => {
     _fear(wx, wy) {
       const h = Spatial.nearestHero(wx, wy, FEAR_PICK);
       if (!h) { api.lastReason = 'Pick a hero'; return false; }
-      if (fearImmune(h) || !Status.apply(h, 'fear', { dur: POWERS.fear.dur, x: h.x, y: h.y })) {
+      if (Status.fearImmune(h) || !Status.apply(h, 'fear', { dur: POWERS.fear.dur, x: h.x, y: h.y })) {
         api.lastReason = 'Immune to fear';
         return false;
       }
@@ -8867,10 +9202,11 @@ const Sprites = (() => {
     for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
       const v = b.px[y * w + x];
       if (!(v >>> 24)) continue;
-      const sx = flip ? w - 1 - x : x;
       const nv = variantPixel(v, b.edge ? b.edge[y * w + x] === 1 : false, variant);
       if (!nv) continue;
-      if (rot) out[sx * cw + (h - 1 - y)] = nv; else out[y * cw + sx] = nv;
+      // Corpses lie rotated 90° clockwise (head to the right); `flip` mirrors the lying body (head left).
+      if (rot) out[x * cw + (flip ? y : h - 1 - y)] = nv;
+      else out[y * cw + (flip ? w - 1 - x : x)] = nv;
     }
     g.putImageData(img, 0, 0);
     return c;
@@ -9160,7 +9496,7 @@ const Sprites = (() => {
  * -------------------------------------------------------------------------- */
 const Render = (() => {
   /* ---- 2.1 Constants & state ---------------------------------------------- */
-  const RS = 2;                 // backing-store scale (crisp text)
+  let RS = 2;                   // backing-store scale: 2 for crisp text; 1 when the board is shown ≤ 1 device px per canvas px
   const ART = 2;                // canvas px per art pixel
   const LPT = 8;                // light-map pixels per tile
   const FOOT = 10;              // feet sit this many px below an entity's centre
@@ -9174,6 +9510,7 @@ const Render = (() => {
   let cols = 0, rows = 0, W = 0, H = 0;
   let time = 0, frameNo = 0, dt = 0;
   let lastPW = -1, lastPH = -1;
+  let hudK = 1;                 // HUD/text scale so overlays stay legible on boards shown below 1 CSS px per canvas px
   const pad = { l: 0, t: 0, r: 0, b: 0 };
 
   // Offscreen layers
@@ -9234,15 +9571,19 @@ const Render = (() => {
     if (!canvas || !S || !S.cols) return;
     if (S.cols !== cols || S.rows !== rows || !stat) {
       cols = S.cols; rows = S.rows; W = cols * TS; H = rows * TS;
-      canvas.width = W * RS; canvas.height = H * RS;
-      ctx.imageSmoothingEnabled = false;
-      stat = mk(W * RS, H * RS); sctx = stat.getContext('2d'); statVer = -1; statS = null;
       lightC = mk(cols * LPT, rows * LPT); lctx = lightC.getContext('2d');
       dangerC = mk(cols, rows); dctx = dangerC.getContext('2d'); dangerImg = dctx.createImageData(cols, rows); dangerVer = -1; dangerS = null;
-      gridC = buildGrid();
       vignette = buildVignette();
+      allocBacking();
     }
     fit();
+  }
+  /** Backing store + layers whose resolution depends on RS. */
+  function allocBacking() {
+    canvas.width = W * RS; canvas.height = H * RS;
+    ctx.imageSmoothingEnabled = false;
+    stat = mk(W * RS, H * RS); sctx = stat.getContext('2d'); statVer = -1; statS = null;
+    gridC = buildGrid();
   }
 
   /** Size taken by the canvas's in-flow siblings (they share the container with the board). */
@@ -9297,6 +9638,10 @@ const Render = (() => {
     if (snapS > 0 && snapS >= s * 0.9) s = snapS;
     const cw = Math.max(1, Math.floor(W * s)), ch = Math.max(1, Math.floor(H * s));
     st.width = cw + 'px'; st.height = ch + 'px';
+    // Shown at ≤ 1 device px per canvas px, a 2× backing store only costs fill rate: drop to 1×.
+    const rs = s * dpr > 1 + 1e-6 ? 2 : 1;
+    if (rs !== RS) { RS = rs; allocBacking(); }
+    hudK = Math.max(1, Math.min(1.75, 1 / s));
     // Upscaling: keep pixels crisp; downscaling: let the browser filter smoothly.
     st.imageRendering = s * dpr >= RS - 1e-6 ? 'pixelated' : 'auto';
     if (!shared) {
@@ -9611,7 +9956,25 @@ const Render = (() => {
   }
 
   let heartBeat = 0;
+  let heartFade = 1;            // < 1 while something stands/is built on the tile the crystal covers
   const heartRect = { x: 0, y: 0, w: 0, h: 0, on: false };
+  /** Heart hit flash (suppressed while paused — its timer only runs with the simulation). */
+  const heartHit = () => S.heartHitT > 0 && !S.paused;
+  /** Is anything on the tile north of the Heart (or on the Heart tile, behind the crystal)? */
+  function heartCovers() {
+    const hx = S.heart.x + 0.5, hy = S.heart.y;
+    const t = Grid.tile(S.heart.x, S.heart.y - 1);
+    if (t && t.s && (t.s.cat === 'trap' || t.s.cat === 'object')) return true;
+    for (let k = 0; k < 2; k++) {
+      const arr = k ? S.monsters : S.heroes;
+      for (let i = 0; i < arr.length; i++) {
+        const e = arr[i];
+        if (e.removed || e.escaped || (e.dead && (e.deadT || 0) > 0.7)) continue;
+        if (Math.abs(e.x - hx) < 1 && e.y >= hy - 1.15 && e.y < hy + 0.8) return true;
+      }
+    }
+    return false;
+  }
   function drawHeart() {
     heartRect.on = false;
     const cx = (S.heart.x + 0.5) * TS, cy = (S.heart.y + 0.5) * TS;
@@ -9626,8 +9989,9 @@ const Render = (() => {
     const ph = (time % period) / period;
     heartBeat = ph < 0.14 ? Math.sin(ph / 0.14 * Math.PI) : (ph > 0.2 && ph < 0.3 ? 0.5 * Math.sin((ph - 0.2) / 0.1 * Math.PI) : 0);
     const hover = Math.sin(time * 1.7) * 1.5;
+    const hit = heartHit();
     ctx.globalCompositeOperation = 'lighter';
-    ctx.globalAlpha = 0.45 + 0.35 * heartBeat + (S.heartHitT > 0 ? 0.4 : 0);
+    ctx.globalAlpha = 0.45 + 0.35 * heartBeat + (hit ? 0.4 : 0);
     const gs = 70 + heartBeat * 12;
     ctx.drawImage(Sprites.glow('#ff1a3c'), cx - gs / 2, cy - 14 - gs / 2 - hover, gs, gs);
     ctx.globalCompositeOperation = 'source-over';
@@ -9635,11 +9999,13 @@ const Render = (() => {
     const sc = 1 + 0.06 * heartBeat;
     const w = 48 * sc, h = 48 * sc;
     const x = snap(cx - w / 2), y = snap(cy - 6 - hover - h + 8 * sc);
-    const variant = S.heartHitT > 0 ? V.WHITE : V.NORMAL;
+    const variant = hit ? V.WHITE : V.NORMAL;
+    ctx.globalAlpha = heartFade; // see-through while it would hide whatever is behind it
     ctx.drawImage(Sprites.canvasOf(R.heart, 0, variant, false), x, y, w, h);
     heartRect.x = x; heartRect.y = y; heartRect.w = w; heartRect.h = h; heartRect.on = true;
     const stage = ratio < 0.25 ? 3 : ratio < 0.5 ? 2 : ratio < 0.75 ? 1 : 0;
     if (stage && variant === V.NORMAL) ctx.drawImage(Sprites.canvasOf(CRACKS[stage], 0, 0, false), x, y, w, h);
+    ctx.globalAlpha = 1;
     // Rune ring on the altar glows with the beat.
     ctx.globalCompositeOperation = 'lighter';
     ctx.globalAlpha = 0.25 + 0.3 * heartBeat;
@@ -9663,6 +10029,7 @@ const Render = (() => {
     for (let i = 0; i < hs.length; i++) { const h = hs[i]; if (!h.removed && !h.escaped) drawList.push(h); else h._rvis = false; }
     for (let i = 0; i < ms.length; i++) { const m = ms[i]; if (!m.removed) drawList.push(m); else m._rvis = false; }
     heartMarker.y = S.heart.y + 0.8;
+    heartFade = heartCovers() ? 0.5 : 1;
     drawList.push(heartMarker);
     sortByDepth(drawList);
     for (let i = 0; i < drawList.length; i++) {
@@ -9674,21 +10041,30 @@ const Render = (() => {
     ctx.globalAlpha = 1;
   }
 
+  /**
+   * Corpses: the lying body continues the death fall exactly (same sprite and scale,
+   * same foot pivot, head toward the fall side) and fades in while the falling body
+   * fades out, then fades away at the end of its life.
+   */
   function drawCorpses() {
     const cs = S.corpses;
     if (!cs || !cs.length) return;
     const rm = Sprites.canvasOf(R.remains, 0, 0, false);
+    const life = CFG.corpseLife;
     for (let i = 0; i < cs.length; i++) {
-      const c = cs[i], r = HERO[c.type];
-      const a = Math.max(0, Math.min(1, c.t / 2.5));
-      if (a <= 0) continue;
-      const x = c.x * TS, y = c.y * TS;
+      const c = cs[i];
+      const boss = c.boss && HBOSS[c.boss] ? c.boss : null;
+      const r = boss ? HBOSS[boss] : HERO[c.type];
+      const a = Math.max(0, Math.min(1, c.t / 2.5)) * Math.max(0, Math.min(1, (life - c.t) / 0.7));
+      if (a <= 0 || !r) continue;
+      const scale = boss ? 3 : 2, left = c.face < 0;
+      const px = c.x * TS, py = c.y * TS + FOOT + (boss ? 2 : 0);   // the fall's pivot (feet)
+      const cw = r.h * scale, ch = r.w * scale;                       // rotated sprite size
+      const x0 = left ? px - r.foot * scale : px + (r.foot - r.h) * scale, y0 = py - ch / 2;
       ctx.globalAlpha = a * 0.9;
-      ctx.drawImage(rm, snap(x - 16), snap(y - 12), 32, 32);
-      if (r) {
-        const cv = Sprites.canvasOf(r, 0, V.CORPSE, (c.uid & 1) === 1);
-        ctx.drawImage(cv, snap(x - cv.width), snap(y - cv.height + 8), cv.width * 2, cv.height * 2);
-      }
+      ctx.drawImage(rm, snap(x0 + cw / 2 - 8 * scale), snap(py - 10 * scale), 16 * scale, 16 * scale);
+      ctx.globalAlpha = a;
+      ctx.drawImage(Sprites.canvasOf(r, 0, V.CORPSE, left), snap(x0), snap(y0), cw, ch);
     }
     ctx.globalAlpha = 1;
   }
@@ -9725,8 +10101,9 @@ const Render = (() => {
     const hidden = s.hidden && !s.revealed;
     const grey = s.disarmed || (s.broken && s.id !== 'pit');
     const variant = grey ? V.GREY : V.NORMAL;
-    const base = hidden ? 0.55 : 1;
     const d = s.data || {};
+    const recharging = S.phase === 'wave' && !grey && (s.cd > 0 || d.rearmT > 0);
+    const base = (hidden ? 0.55 : 1) * (recharging ? 0.62 : 1); // dimmed while recharging
     ctx.globalAlpha = base;
     switch (s.id) {
       case 'spike':
@@ -10065,26 +10442,30 @@ const Render = (() => {
     ctx.globalAlpha = 1;
   }
 
-  /* ---- 2.9 Readability overlays: bars, statuses, badges (drawn after lighting) ------ */
+  /* ---- 2.9 Readability overlays: bars, statuses, badges (drawn after lighting) ------
+   * Sizes are multiplied by hudK (≥ 1) so bars, icons and text stay legible when a
+   * large board is shown below 1 CSS px per canvas px.                               */
   const CH_COL = { loot: '#ffd84a', disarm: '#7ae8ff', blast: '#d08aff', dig: '#d8a070' };
   const CH_ICON = { loot: 'i_coin', disarm: 'i_wrench', blast: 'i_blast', dig: 'i_pick' };
   const icoBuf = [];
   let icoN = 0;
   const hpColor = k => (k > 0.6 ? '#5ee06a' : k > 0.3 ? '#ffd24a' : '#ff4a3a');
+  /** HUD thickness: scaled by hudK and rounded up to whole backing pixels (crisp bars). */
+  const hk = v => Math.ceil(v * hudK * RS) / RS;
   function bar(x, y, w, h, k, col) {
     k = k > 1 ? 1 : k < 0 ? 0 : k;
     ctx.fillStyle = '#0b060d'; ctx.fillRect(x - 1, y - 1, w + 2, h + 2);
     ctx.fillStyle = '#3a2430'; ctx.fillRect(x, y, w, h);
     ctx.fillStyle = col; ctx.fillRect(x, y, Math.round(w * k * RS) / RS, h);
-    ctx.fillStyle = 'rgba(255,255,255,0.28)'; ctx.fillRect(x, y, Math.round(w * k * RS) / RS, 0.5);
+    ctx.fillStyle = 'rgba(255,255,255,0.28)'; ctx.fillRect(x, y, Math.round(w * k * RS) / RS, h * 0.25);
   }
   function cdRing(cx, cy, r, k, col) {
     k = k > 1 ? 1 : k < 0 ? 0 : k;
     ctx.globalAlpha = 0.9; ctx.fillStyle = '#0b060d';
-    ctx.beginPath(); ctx.arc(cx, cy, r + 1.5, 0, TAU); ctx.fill();
-    ctx.strokeStyle = '#3a2a40'; ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.arc(cx, cy, r + 1.5 * hudK, 0, TAU); ctx.fill();
+    ctx.strokeStyle = '#3a2a40'; ctx.lineWidth = 1.5 * hudK;
     ctx.beginPath(); ctx.arc(cx, cy, r, 0, TAU); ctx.stroke();
-    ctx.strokeStyle = col; ctx.lineWidth = 2;
+    ctx.strokeStyle = col; ctx.lineWidth = 2 * hudK;
     ctx.beginPath(); ctx.arc(cx, cy, r, -Math.PI / 2, -Math.PI / 2 + TAU * k); ctx.stroke();
     if (k >= 1) {
       ctx.globalAlpha = 0.6 + 0.4 * Math.sin(time * 9);
@@ -10093,9 +10474,10 @@ const Render = (() => {
     ctx.globalAlpha = 1;
   }
   function pushIcon(name) { if (icoN < 12) icoBuf[icoN++] = R[name]; }
+  /** Row of status icons centred on cx with its bottom edge at y. */
   function drawIconRow(cx, y, alpha) {
     if (!icoN) return;
-    const sz = 10.5, gap = 9.5;
+    const sz = 10.5 * hudK, gap = 9.5 * hudK;
     const x0 = cx - (icoN * gap) / 2 + (gap - sz) / 2;
     ctx.globalAlpha = alpha;
     for (let i = 0; i < icoN; i++) ctx.drawImage(Sprites.canvasOf(icoBuf[i], 0, 0, false), snap(x0 + i * gap), snap(y - sz), sz, sz);
@@ -10114,13 +10496,14 @@ const Render = (() => {
     if (hero && st.exposed) pushIcon('i_eye');
     if (st.invisT > 0) pushIcon('i_invis');
   }
-  function stunStars(cx, cy) {
-    const st = R.i_star;
+  /** Stars circling the head (below the HP bar). */
+  function stunStars(cx, cy, rx) {
+    const st = R.i_star, sz = 6 * hudK;
     for (let i = 0; i < 3; i++) {
       const a = time * 5 + i * (TAU / 3);
-      const x = cx + Math.cos(a) * 8, y = cy + Math.sin(a) * 2.5;
+      const x = cx + Math.cos(a) * rx, y = cy + Math.sin(a) * 2.5;
       ctx.globalAlpha = Math.sin(a) > 0 ? 1 : 0.6;
-      ctx.drawImage(Sprites.canvasOf(st, 0, 0, false), snap(x - 3), snap(y - 3), 6, 6);
+      ctx.drawImage(Sprites.canvasOf(st, 0, 0, false), snap(x - sz / 2), snap(y - sz / 2), sz, sz);
     }
     ctx.globalAlpha = 1;
   }
@@ -10148,11 +10531,19 @@ const Render = (() => {
       if (!m._rvis || m.dead || m.removed || m.disguised || !m._rrec || !(m.flashT > 0)) continue;
       ctx.globalAlpha = 0.85; drawSprite(m._rrec, m._rfr, V.WHITE, m._rflip, m._rpx, m._rfoot, m._rsc);
     }
-    if (heartRect.on && S.heartHitT > 0) {
-      ctx.globalAlpha = Math.min(1, S.heartHitT / 0.25) * 0.8;
+    if (heartRect.on && heartHit()) {
+      ctx.globalAlpha = Math.min(1, S.heartHitT / 0.25) * 0.8 * heartFade;
       ctx.drawImage(Sprites.canvasOf(R.heart, 0, V.WHITE, false), heartRect.x, heartRect.y, heartRect.w, heartRect.h);
     }
     ctx.globalAlpha = 1;
+  }
+  function pennant(h, top) {
+    let pc = 0;
+    const pid = h.party && h.party.id;
+    if (typeof pid === 'number') pc = Math.abs(pid) % 5; else if (typeof pid === 'string') pc = pid.length % 5;
+    const f = pc + (Math.floor(time * 3 + h.uid) & 1) * 5;
+    const fx = h._rpx - (h.face < 0 ? -1 : 1) * 7;
+    ctx.drawImage(Sprites.canvasOf(R.pennant, f, 0, h.face < 0), snap(fx - 1), snap(top - 9), 7, 10);
   }
   function drawEntityHUD() {
     const wave = S.phase === 'wave';
@@ -10161,46 +10552,37 @@ const Render = (() => {
       const h = hs[i];
       if (!h._rvis || h.dead || h.removed || h.escaped) continue;
       const boss = h.boss && HBOSS[h.boss] ? h.boss : null;
-      const invis = h.st && h.st.invisT > 0;
-      const a = invis ? 0.45 : 1;
-      const w = boss ? 30 : 18, bh = boss ? 3 : 2;
+      const a = h.st && h.st.invisT > 0 ? 0.45 : 1;
+      const w = boss ? 30 : 18, bh = hk(boss ? 3 : 2);
       const x = snap(h._rpx - w / 2);
-      let y = snap(h._rtop - (boss ? 6 : 4));
+      let y = snap(h._rtop - 2 - bh);   // HP bar sits just above the head
       ctx.globalAlpha = a;
+      // Pennant first (it sits behind the bars), then the bars on top.
+      if (h.leader && !boss) pennant(h, h._rtop);
+      if (h.loot > 0) { // loot sack slung on the back
+        const bx = h._rpx - (h.face < 0 ? -1 : 1) * 9;
+        ctx.drawImage(Sprites.canvasOf(R.i_sack, 0, 0, false), snap(bx - 6), snap(h._rpy - 20), 12, 12);
+      }
       bar(x, y, w, bh, h.hp / Math.max(1, h.maxHp), hpColor(h.hp / Math.max(1, h.maxHp)));
       if (boss) {
         const cd = h.abilityCd > 0 ? 1 - Math.max(0, h.abilityT || 0) / h.abilityCd : 1;
-        cdRing(x - 6, y + 1.5, 3.5, cd, HBOSS_AURA[boss]);
-        ctx.font = font(8); ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic';
-        ctx.lineWidth = 2.5; ctx.strokeStyle = '#0b060d'; ctx.lineJoin = 'round';
+        const rr = 3.5 * hudK;
+        cdRing(x - rr - 2.5, y + bh / 2, rr, cd, HBOSS_AURA[boss]);
         ctx.globalAlpha = a;
-        ctx.strokeText(HBOSS_SHORT[boss], h._rpx, y - 3); ctx.fillStyle = HBOSS_AURA[boss]; ctx.fillText(HBOSS_SHORT[boss], h._rpx, y - 3);
-        y -= 10;
+        label(HBOSS_SHORT[boss], h._rpx, y - 2 - 4 * hudK, HBOSS_AURA[boss], 8);
+        y -= 3 + 8 * hudK;
       }
       if (h.channel && h.channel.max > 0) {
-        const kind = h.channel.kind;
-        bar(x + 3, y - 4, w - 3, 2, channelProgress(h), CH_COL[kind] || '#ffffff');
+        const kind = h.channel.kind, ch = hk(2), isz = 7.5 * hudK;
+        const cy = y - 3 - ch;
+        bar(x + 3, cy, w - 3, ch, channelProgress(h), CH_COL[kind] || '#ffffff');
         const ic = R[CH_ICON[kind]];
-        if (ic) ctx.drawImage(Sprites.canvasOf(ic, 0, 0, false), x - 5, y - 6.5, 7.5, 7.5);
-        y -= 6;
+        if (ic) ctx.drawImage(Sprites.canvasOf(ic, 0, 0, false), snap(x - isz + 2), snap(cy + ch / 2 - isz / 2), isz, isz);
+        y = cy;
       }
       statusIcons(h, true);
-      drawIconRow(h._rpx, y - 1.5, a);
-      if (h.st && h.st.stunT > 0) stunStars(h._rpx, h._rtop - 1);
-      if (h.loot > 0) { // loot sack slung on the back
-        const bx = h._rpx - (h.face < 0 ? -1 : 1) * 9;
-        ctx.globalAlpha = a;
-        ctx.drawImage(Sprites.canvasOf(R.i_sack, 0, 0, false), snap(bx - 6), snap(h._rpy - 20), 12, 12);
-      }
-      if (h.leader && !boss) {
-        let pc = 0;
-        const pid = h.party && h.party.id;
-        if (typeof pid === 'number') pc = pid % 5; else if (typeof pid === 'string') pc = pid.length % 5;
-        const f = pc + (Math.floor(time * 3 + h.uid) & 1) * 5;
-        const fx = h._rpx - (h.face < 0 ? -1 : 1) * 7;
-        ctx.globalAlpha = a;
-        ctx.drawImage(Sprites.canvasOf(R.pennant, f, 0, h.face < 0), snap(fx - 1), snap(h._rtop - 9), 7, 10);
-      }
+      drawIconRow(h._rpx, y - 2, a);
+      if (h.st && h.st.stunT > 0) stunStars(h._rpx, h._rtop + (boss ? 8 : 5), boss ? 12 : 8);
       ctx.globalAlpha = 1;
     }
     const ms = S.monsters;
@@ -10208,14 +10590,14 @@ const Render = (() => {
       const m = ms[i];
       if (!m._rvis || m.dead || m.removed || m.disguised) continue;
       const hurt = m.hp < m.maxHp - 0.5;
-      const w = m.isBoss ? 30 : 16, bh = m.isBoss ? 3 : 2;
+      const w = m.isBoss ? 30 : 16, bh = hk(m.isBoss ? 3 : 2);
       const x = snap(m._rpx - w / 2);
-      let y = snap(m._rtop - (m.isBoss ? 3 : 3));
+      const y = snap(m._rtop - 1 - bh);
       if (hurt || (m.isBoss && wave)) bar(x, y, w, bh, m.hp / Math.max(1, m.maxHp), m.isBoss ? '#ff6a2a' : '#e8384a');
-      if (m.isBoss && m.abilityCd > 0) cdRing(x - 6, y + 1.5, 3.5, 1 - Math.max(0, m.abilityT || 0) / m.abilityCd, '#ff9a3c');
+      if (m.isBoss && m.abilityCd > 0) { const rr = 3.5 * hudK; cdRing(x - rr - 2.5, y + bh / 2, rr, 1 - Math.max(0, m.abilityT || 0) / m.abilityCd, '#ff9a3c'); }
       statusIcons(m, false);
       drawIconRow(m._rpx, y - 2, 1);
-      if (m.st && m.st.stunT > 0) stunStars(m._rpx, m._rtop);
+      if (m.st && m.st.stunT > 0) stunStars(m._rpx, m._rtop + (m.isBoss ? 10 : 5), m.isBoss ? 13 : 8);
       if (m.level > 1) {
         ctx.fillStyle = '#0b060d';
         for (let l = 1; l < m.level; l++) ctx.fillRect(snap(m._rpx - 4 + (l - 1) * 5 - 0.5) + (m.level === 2 ? 2.5 : 0), snap(m._rpy + 1.5), 4, 4);
@@ -10224,12 +10606,25 @@ const Render = (() => {
       }
     }
   }
-  /** Trap/object badges: secret (closed eye), visible-in-torchlight (eye), revealed '!', disarmed tag, broken cracks, level pips, barricade HP. */
+  /**
+   * Remaining recharge of a trap as a fraction (0..1), or -1 when armed. The full
+   * duration is learnt from the value seen when a cycle starts, so perk-modified
+   * cooldowns (Quick Reload, Stonemason, Trapmaster rearm) are measured exactly.
+   */
+  function rechargeLeft(s) {
+    const v = Math.max(s.cd > 0 ? s.cd : 0, s.data && s.data.rearmT > 0 ? s.data.rearmT : 0);
+    if (v <= 0) { s._rcdMax = 0; return -1; }
+    if (!(s._rcdMax >= v)) s._rcdMax = v;
+    return v / s._rcdMax;
+  }
+  /** Trap/object badges: secret (closed eye), visible-in-torchlight (eye), revealed '!', disarmed tag, broken cracks, recharge bar, level pips, barricade HP. */
   function drawStructHUD() {
-    const ss = S.structs;
+    const ss = S.structs, wave = S.phase === 'wave';
+    const bk = Math.min(hudK, 1.4);
     for (let i = 0; i < ss.length; i++) {
       const s = ss[i];
       const x = s.x * TS, y = s.y * TS;
+      let pipY = y + 26;
       if (s.cat === 'trap') {
         let badge = null;
         if (s.disarmed) badge = R.i_disarm;
@@ -10237,8 +10632,9 @@ const Render = (() => {
         else if (s.hidden && !s.revealed && !s.broken) badge = trapKnown(s) ? R.i_known : R.i_hidden;
         if (badge) {
           const bob = badge === R.i_bang ? Math.round(Math.sin(time * 6 + s.uid) * 1) : 0;
+          const bw = badge.w * 1.5 * bk, bhh = badge.h * 1.5 * bk;
           ctx.globalAlpha = badge === R.i_hidden ? 0.85 : 1;
-          ctx.drawImage(Sprites.canvasOf(badge, 0, 0, false), x + 21, y + 1 + bob, badge.w * 1.5, badge.h * 1.5);
+          ctx.drawImage(Sprites.canvasOf(badge, 0, 0, false), x + 32 - bw - 0.5, y + 1 + bob, bw, bhh);
           ctx.globalAlpha = 1;
         }
         if (s.broken && s.id !== 'pit') {
@@ -10246,12 +10642,20 @@ const Render = (() => {
           ctx.fillRect(x + 7, y + 9, 6, 1.5); ctx.fillRect(x + 12, y + 10, 1.5, 6); ctx.fillRect(x + 12, y + 15, 7, 1.5);
           ctx.fillRect(x + 18, y + 16, 1.5, 7); ctx.fillRect(x + 19, y + 22, 5, 1.5);
         }
+        if (wave && !s.disarmed) {
+          const left = rechargeLeft(s);
+          if (left > 0 && s._rcdMax >= 2.5) { // recharge bar for traps with a meaningful cooldown
+            const bh = hk(2);
+            bar(x + 5, y + 31 - bh, 22, bh, 1 - left, '#8fd8ff');
+            pipY = y + 29 - bh - 4;
+          }
+        }
       }
-      if (s.cat === 'object' && s.id === 'barricade' && !s.broken && s.maxHp && s.hp < s.maxHp) bar(x + 6, y + 1, 20, 2, s.hp / s.maxHp, '#d8a050');
+      if (s.cat === 'object' && s.id === 'barricade' && !s.broken && s.maxHp && s.hp < s.maxHp) bar(x + 6, y + 1, 20, hk(2), s.hp / s.maxHp, '#d8a050');
       if ((s.cat === 'trap' || s.cat === 'object') && s.level > 1) {
         for (let l = 1; l < s.level; l++) {
-          ctx.fillStyle = '#0b060d'; ctx.fillRect(x + 2 + (l - 1) * 5, y + 26, 4, 4);
-          ctx.fillStyle = '#ffd24a'; ctx.fillRect(x + 2.5 + (l - 1) * 5, y + 26.5, 3, 3);
+          ctx.fillStyle = '#0b060d'; ctx.fillRect(x + 2 + (l - 1) * 5, pipY, 4, 4);
+          ctx.fillStyle = '#ffd24a'; ctx.fillRect(x + 2.5 + (l - 1) * 5, pipY + 0.5, 3, 3);
         }
       }
     }
@@ -10334,10 +10738,14 @@ const Render = (() => {
       for (let i = 0; i < ts.length; i++) {
         const t = ts[i];
         const k = t.life / t.max, age = t.max - t.life;
-        const size = Math.max(6, Math.round(t.size * (age < 0.1 ? 0.7 + age * 3 : 1)));
+        const full = Math.max(6, Math.round(t.size * hudK));
+        if (t._rsz !== full) { ctx.font = font(full); t._rw = ctx.measureText(t.str).width; t._rsz = full; lastF = -1; } // measured once per size
+        const size = Math.max(6, Math.round(full * (age < 0.1 ? 0.7 + age * 3 : 1)));
         if (size !== lastF) { ctx.font = font(size); ctx.lineWidth = Math.max(2, size * 0.3); lastF = size; }
         ctx.globalAlpha = k < 0.35 ? k / 0.35 : 1;
-        const x = t.x * TS, y = t.y * TS;
+        // Keep the whole text inside the board (callouts near the edges would be clipped).
+        const half = t._rw * size / full / 2 + ctx.lineWidth;
+        const x = Math.max(half, Math.min(W - half, t.x * TS)), y = Math.max(size * 0.6 + 1, t.y * TS);
         ctx.strokeText(t.str, x, y);
         ctx.fillStyle = t.color; ctx.fillText(t.str, x, y);
       }
@@ -10499,9 +10907,13 @@ const Render = (() => {
     }
     return g.res;
   }
+  /** Outlined label (scaled by hudK), kept horizontally inside the board. */
   function label(str, x, y, col, size) {
-    ctx.font = font(size || 8); ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    ctx.lineJoin = 'round'; ctx.lineWidth = 3; ctx.strokeStyle = '#0b060d';
+    const sz = Math.round((size || 8) * hudK);
+    ctx.font = font(sz); ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.lineJoin = 'round'; ctx.lineWidth = 3 * hudK; ctx.strokeStyle = '#0b060d';
+    const half = ctx.measureText(str).width / 2 + 2 * hudK;
+    x = Math.max(half, Math.min(W - half, x));
     ctx.strokeText(str, x, y); ctx.fillStyle = col; ctx.fillText(str, x, y);
   }
   function drawGhost() {
@@ -10587,7 +10999,7 @@ const Render = (() => {
     } else if (pw === 'fear') {
       const h = Spatial.nearestHero(wx, wy, 0.9);
       if (h) {
-        const immune = HERO_CLASSES[h.type] && (HERO_CLASSES[h.type].fearImmune || h.boss);
+        const immune = typeof Status.fearImmune === 'function' ? Status.fearImmune(h) : !!(h.boss || (HERO_CLASSES[h.type] && HERO_CLASSES[h.type].fearImmune));
         const col = immune ? '#9a9aa8' : '#c07aff';
         ctx.strokeStyle = col; ctx.lineWidth = 2; ctx.globalAlpha = 0.95;
         ctx.setLineDash(DASH); ctx.lineDashOffset = -time * 12;
@@ -10621,7 +11033,9 @@ const Render = (() => {
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over';
     ctx.imageSmoothingEnabled = false;
-    const sx = Math.round((FX.shakeX || 0) * RS) / RS, sy = Math.round((FX.shakeY || 0) * RS) / RS;
+    // FX timers don't advance while paused: freeze-frame without shake/flashes.
+    const live = !S.paused;
+    const sx = live ? Math.round((FX.shakeX || 0) * RS) / RS : 0, sy = live ? Math.round((FX.shakeY || 0) * RS) / RS : 0;
     // The static layer is opaque; the backdrop only shows at the edges while the camera shakes.
     if (sx || sy) { ctx.fillStyle = DARK; ctx.fillRect(0, 0, canvas.width, canvas.height); }
     ctx.setTransform(RS, 0, 0, RS, sx * RS, sy * RS);
@@ -10649,7 +11063,7 @@ const Render = (() => {
       ctx.imageSmoothingEnabled = true; ctx.drawImage(vignette, 0, 0, W, H); ctx.drawImage(vignette, 0, 0, W, H); ctx.imageSmoothingEnabled = false;
     }
     const f = FX.screenFlash;
-    if (f && f.max > 0) {
+    if (f && f.max > 0 && live) {
       ctx.globalAlpha = Math.max(0, Math.min(1, f.life / f.max)) * 0.6;
       ctx.fillStyle = f.color; ctx.fillRect(0, 0, W, H);
       ctx.globalAlpha = 1;
@@ -10683,23 +11097,9 @@ const UI = (() => {
   const REWARD_GUARD_MS = 320;    // ignore perk picks right after the modal opens (no click-through)
   const FAIL_TOAST_GAP = 1400;    // ms before the same placement-failure reason may toast again
   const LOW_HEART = 0.3;          // Heart bar turns red & pulses at/below this fraction
+  const MODAL_GUARD_MS = 600;     // title / game-over buttons ignore clicks this long after opening
   const SPEEDS = [1, 2, 4];
   const POWER_IDS = Object.keys(POWERS);
-
-  /** Emoji used when Sprites.iconURL() returns nothing for an item. */
-  const GLYPH = {
-    'wall:wall': '🧱',
-    'trap:spike': '🔺', 'trap:arrow': '🏹', 'trap:pit': '🕳️', 'trap:slime': '🟢', 'trap:fire': '🔥',
-    'trap:alarm': '🔔', 'trap:boulder': '🪨', 'trap:teleport': '🌀',
-    'monster:skeleton': '💀', 'monster:goblin': '👺', 'monster:orc': '👹', 'monster:spider': '🕷️',
-    'monster:imp': '😈', 'monster:wraith': '👻', 'monster:mimic': '🎁',
-    'boss:minotaur': '🐂', 'boss:lich': '☠️', 'boss:dragon': '🐉',
-    'object:chest': '💰', 'object:torch': '🕯️', 'object:barricade': '🚧', 'object:well': '⛲', 'object:lair': '🦴',
-    'hero:warrior': '⚔️', 'hero:rogue': '🗡️', 'hero:ranger': '🏹', 'hero:mage': '🧙', 'hero:cleric': '✨',
-    'hero:paladin': '🛡️', 'hero:miner': '⛏️',
-    'heroBoss:champion': '👑', 'heroBoss:archmage': '🔮', 'heroBoss:saint': '😇', 'heroBoss:shadow': '🥷',
-    'tile:rock': '🪨', 'tile:entrance': '🚪', 'tile:heart': '❤️', 'tile:floor': '⬛',
-  };
 
   /** Stats shown as chips on each build card (in order; missing keys are skipped). */
   const CARD_KEYS = {
@@ -10718,7 +11118,6 @@ const UI = (() => {
   const STAT_SKIP = new Set(['cost', 'unlock', 'name', 'desc', 'place', 'hidden', 'oneUse', 'lure', 'undead', 'phasing', 'ranged', 'ability', 'abilityName', 'level', 'lvl', 'id', 'type']);
   /** describe() lines that merely repeat an HP bar we already draw. */
   const HP_LINE = /^\s*(hp|health)\s*[:\s]\s*\d/i;
-  const MON_SCALED = new Set(['hp', 'dmg', 'ambushDmg', 'chargeDmg', 'breathDmg']);
 
   /* ---------------------------------------------------------------------------
    * 2. SMALL HELPERS
@@ -10734,9 +11133,10 @@ const UI = (() => {
   const secs = v => num(v, 2) + 's';
   const tiles = v => num(v, 1) + (v === 1 ? ' tile' : ' tiles');
   const pct = v => Math.round(v * 100) + '%';
+  /** '1 wave' / '3 waves' (formatted count + correctly pluralised noun). */
+  const plural = (n, word, many = word + 's') => fmtInt(n) + ' ' + (n === 1 ? word : many);
   const humanize = k => String(k).replace(/([a-z])([A-Z])/g, '$1 $2').replace(/^./, c => c.toUpperCase()).replace(/ ([A-Z])/g, (m, c) => ' ' + c.toLowerCase());
   const rarColor = r => (RARITY[r] ? RARITY[r].color : '#b9b9b9');
-  const has = (obj, fn) => typeof obj !== 'undefined' && obj && typeof obj[fn] === 'function';
 
   /** Stat key → [label, long formatter, short chip formatter]. */
   const STAT = {
@@ -10774,16 +11174,6 @@ const UI = (() => {
     const fmt = d ? d[1] : (v => num(v));
     const short = d && d[2] ? d[2] : (v => fmt(v) + ' ' + label.toLowerCase());
     return { label, fmt, short };
-  }
-
-  /** Run fn, returning `fallback` on error (other modules may be mid-development). Warns once per site. */
-  const warned = new Set();
-  function safe(fn, fallback, site) {
-    try { return fn(); } catch (e) {
-      const key = site || String(e && e.message);
-      if (!warned.has(key)) { warned.add(key); console.warn('[UI] ' + key + ':', e); }
-      return fallback;
-    }
   }
 
   /** Diffed DOM writes — only touch a node when the value changed. */
@@ -10871,27 +11261,13 @@ const UI = (() => {
   }
 
   /* ---------------------------------------------------------------------------
-   * 4. SPRITE ICONS (from Render's Sprites, with emoji fallback)
+   * 4. SPRITE ICONS (from Render's Sprites)
    * ------------------------------------------------------------------------ */
-  const iconCache = new Map();
-  /** Cached Sprites.iconURL(kind, id); '' when unavailable. Empty results are not cached. */
-  function iconURL(kind, id) {
-    const key = kind + ':' + id;
-    const hit = iconCache.get(key);
-    if (hit) return hit;
-    let url = '';
-    if (typeof Sprites !== 'undefined' && Sprites && typeof Sprites.iconURL === 'function') {
-      url = safe(() => Sprites.iconURL(kind, id), '', 'Sprites.iconURL') || '';
-    }
-    if (typeof url !== 'string') url = '';
-    if (url) iconCache.set(key, url);
-    return url;
-  }
-  /** <img> for a sprite icon, or a glyph span when there is no image. */
+  /** <img> for a Sprites icon (Sprites caches the data URLs; an empty box if a sprite ever fails to paint). */
   function iconHTML(kind, id, cls = '') {
-    const url = iconURL(kind, id);
-    if (url) return `<img class="ico${cls ? ' ' + cls : ''}" src="${url}" alt="" draggable="false">`;
-    return `<span class="ico glyph${cls ? ' ' + cls : ''}">${GLYPH[kind + ':' + id] || '❔'}</span>`;
+    const url = Sprites.iconURL(kind, id);
+    const c = 'ico' + (cls ? ' ' + cls : '');
+    return url ? `<img class="${c}" src="${url}" alt="" draggable="false">` : `<span class="${c}"></span>`;
   }
   const structIcon = (cat, id, cls) => iconHTML(cat === 'wall' ? 'wall' : cat, id, cls);
 
@@ -10911,8 +11287,8 @@ const UI = (() => {
     toasts: [],
     reward: { ids: [], t: 0 },
     helpPaused: false,      // help overlay paused the wave (resume on close)
-    bossKillsAtStart: 0,
-    cdMax: {},              // observed full cooldown per power (handles perk-scaled cooldowns)
+    overT: 0, titleT: 0,    // when the game-over / title modals opened (accidental-click guard)
+    wallKey: -1, walls: 0,  // cached count of player walls (per S.pathVersion)
     powerRefs: {},
     resizeQueued: false,
     previewFor: undefined,  // the S.nextWave object the preview was built from
@@ -10934,7 +11310,7 @@ const UI = (() => {
     msg = String(msg == null ? '' : msg);
     if (!msg) return;
     if (!TOAST_ICON[kind]) kind = 'info';
-    if (!U.ready) { console.log('[toast] ' + msg); return; }
+    if (!U.ready) return;
     const dup = U.toasts.find(t => !t.leaving && t.msg === msg && t.kind === kind);
     if (dup) {
       dup.count++;
@@ -11101,8 +11477,8 @@ const UI = (() => {
     // While placing, only surface non-obvious rejection reasons.
     if (S.phase === 'build' && S.ui.tool) {
       const t = S.ui.tool;
-      const c = safe(() => Build.canPlace(t.cat, t.id, hv.tx, hv.ty), { ok: true }, 'Build.canPlace');
-      if (c && !c.ok && c.reason && !/occupied|open floor/i.test(c.reason)) {
+      const c = Build.canPlace(t.cat, t.id, hv.tx, hv.ty);
+      if (!c.ok && c.reason && !/occupied|open floor/i.test(c.reason)) {
         return `<div class="${c.blocks ? 'tt-bad' : 'tt-warn'}">${px(c.blocks ? 'bad' : 'warn')} ${esc(c.reason)}</div>`;
       }
       return '';
@@ -11128,8 +11504,7 @@ const UI = (() => {
     if (p.target === 'hero') {
       const h = Spatial.nearestHero(hv.wx, hv.wy, 0.9);
       if (!h) return `<div class="tt-desc">${p.icon} Click a hero to terrify them.</div>`;
-      const immune = HERO_CLASSES[h.type].fearImmune || h.boss;
-      return immune ? `<div class="tt-warn">${px('warn')} ${esc(heroName(h))} is immune to fear.</div>` : `<div class="tt-good">${p.icon} Terrify ${esc(heroName(h))}</div>`;
+      return Status.fearImmune(h) ? `<div class="tt-warn">${px('warn')} ${esc(heroName(h))} is immune to fear.</div>` : `<div class="tt-good">${p.icon} Terrify ${esc(heroName(h))}</div>`;
     }
     if (id === 'lightning') {
       const n = Spatial.heroesInRadius(hv.wx, hv.wy, p.radius).length;
@@ -11149,7 +11524,7 @@ const UI = (() => {
     if (b) tags.push(`<span class="badge badge-boss">${px('crown')}Boss</span>`);
     if (h.elite) tags.push(`<span class="badge badge-rep">${px('star')}Elite</span>`);
     const sub = b ? esc(b.title) + ' · ' + esc(c.name) : esc(c.name) + ' · ' + esc(c.role);
-    const state = has(typeof Heroes !== 'undefined' ? Heroes : null, 'stateLabel') ? safe(() => Heroes.stateLabel(h), h.state, 'Heroes.stateLabel') : h.state;
+    const state = Heroes.stateLabel(h);
     const r = [['State', esc(state || '—')]];
     if (h.loot > 0) r.push(['Carrying', `<span class="goldc">${px('sack')} ${fmtInt(h.loot)} gold</span>`]);
     if (h.channel && h.channel.max > 0) r.push(['Channeling', `${esc(humanize(h.channel.kind))} ${pct(clamp(h.channel.t / h.channel.max, 0, 1))}`]);
@@ -11167,13 +11542,12 @@ const UI = (() => {
     if (m.isBoss || cat === 'boss') tags.push('Dungeon boss');
     if (m.temp) tags.push(m.risen ? 'Risen for this wave' : m.lair ? 'Lair spawn' : 'Summoned');
     else if (m.risen) tags.push('Risen');
-    const state = has(typeof Monsters !== 'undefined' ? Monsters : null, 'stateLabel') ? safe(() => Monsters.stateLabel(m), m.state, 'Monsters.stateLabel') : m.state;
+    const state = Monsters.stateLabel(m);
     const r = [['State', esc(state || '—')]];
     if (m.disguised) r.push(['Disguise', 'Looks like a treasure chest']);
     if (m.abilityName) r.push([esc(m.abilityName), m.abilityT > 0 ? 'in ' + secs(Math.max(0.1, m.abilityT)) : '<span class="good">ready</span>']);
     if (m.respawnT > 0) r.push(['Reassembles', 'in ' + secs(m.respawnT)]);
-    const lines = has(typeof Monsters !== 'undefined' ? Monsters : null, 'describe') ? safe(() => Monsters.describe(m), [], 'Monsters.describe') : [];
-    const extra = Array.isArray(lines) ? lines.map(String).filter(l => !HP_LINE.test(l)) : [];
+    const extra = Monsters.describe(m).filter(l => !HP_LINE.test(l));
     const lineHTML = extra.length ? `<ul class="tt-lines">${extra.slice(0, 6).map(l => `<li>${esc(l)}</li>`).join('')}</ul>` : '';
     const sub = `${pipsHTML(lvl)} Level ${lvl}${tags.length ? ' · ' + tags.join(' · ') : ''}`;
     return tipHead(structIcon(cat, m.type), esc(d.name), sub) + hpBar(m.hp, m.maxHp, 'fill-mon') + rows(r) + statusChips(m) + lineHTML;
@@ -11224,7 +11598,7 @@ const UI = (() => {
   function terrainTip(t) {
     switch (t.type) {
       case T.WALL:
-        if (t.rubble) return simpleTip(iconHTML('wall', 'wall'), 'Rubble', 'Collapsed tunnel', 'Blocks the way like a wall. Right-click during the build phase to clear it (no refund).');
+        if (t.rubble) return simpleTip(iconHTML('tile', 'rubble'), 'Rubble', 'Collapsed tunnel', 'Blocks the way like a wall. Right-click during the build phase to clear it (no refund).');
         return tipHead(iconHTML('wall', 'wall'), 'Stone Wall', 'Player-built') +
           `<div class="tt-desc">Blocks heroes and their line of sight. Arrow Walls can be mounted on it.</div>` +
           (S.phase === 'build' ? `<div class="tt-foot">Sell for <b class="goldc">${fmtInt(Build.sellValue(t.x, t.y))}g</b> · right-click to sell</div>` : '');
@@ -11234,25 +11608,28 @@ const UI = (() => {
         return simpleTip(iconHTML('tile', 'entrance'), 'Entrance', 'Where heroes arrive', 'Adventurers enter here. Fleeing heroes — and thieves carrying your treasure — escape through it.');
       case T.HEART: return heartTip();
       default: {
+        const lit = Light.isLit(t.x, t.y);
+        let html = tipHead(iconHTML('tile', 'floor', 'mini'), 'Open floor', lit ? 'Torchlit' : 'Open ground');
+        html += lit ? '<div class="tt-desc">Heroes standing here are <b class="warn">Exposed</b> (+' + pct(CFG.torchExposed) + ' damage taken) — but hidden traps in the light are visible to them.</div>'
+          : `<div class="tt-desc">${S.phase === 'build' ? 'Build walls, traps, monsters or objects here.' : 'Heroes can walk here.'}</div>`;
         const dng = Danger.get(t.x, t.y);
         if (dng >= 1 || (S.ui.showDanger && dng > 0.05)) {
-          return tipHead(px('eye'), 'Danger memory', 'Heroes remember this spot') + hpBar(dng, CFG.dangerCap, 'fill-mon', false) +
-            `<div class="tt-desc">Heroes died or found traps near here (${num(dng, 1)}). Smarter heroes route around remembered danger; it fades between waves.</div>`;
+          html += `<div class="tt-foot">${px('eye')} <b>Danger memory ${num(dng, 1)}</b> — heroes died or found traps near here; smarter heroes route around it. It fades between waves.</div>`;
         }
-        return '';
+        return html;
       }
     }
   }
-  /** Human text for the Heart's retaliation pulse (flat + % of the victim's max HP, ×3 with Heart of Thorns). */
+  /** Human text for the Heart's retaliation pulse (flat + % of the victim's max HP, ×2 with Heart of Thorns). */
   function heartPulseText() {
-    const mul = hasPerk('thorns') ? 3 : 1;
+    const mul = Heart.pulseMul();
     const flat = CFG.heartPulseDmg * mul, frac = (CFG.heartPulsePct || 0) * mul;
     return `${flat}${frac ? ' + ' + pct(frac) + ' of max HP' : ''} damage every ${secs(CFG.heartPulseCd)} to heroes beside or attacking it`;
   }
   function heartTip() {
     const r = [['Pulse', heartPulseText()], ['Regenerates', `+${CFG.heartRegenPerWave} HP after each wave`]];
     if (hasPerk('undying_heart')) r.push(['Undying', S.undyingUsed ? '<span class="bad">spent this wave</span>' : '<span class="good">ready</span>']);
-    return tipHead(px('gem'), 'The Dungeon Heart', 'Protect it at all costs') + hpBar(S.heartHp, S.heartMax, 'fill-heart') + rows(r) +
+    return tipHead(iconHTML('tile', 'heart'), 'The Dungeon Heart', 'Protect it at all costs') + hpBar(S.heartHp, S.heartMax, 'fill-heart') + rows(r) +
       '<div class="tt-foot">If it shatters, the run is over.</div>';
   }
 
@@ -11301,7 +11678,8 @@ const UI = (() => {
     if (p.tradeoff) badges.push('<span class="badge badge-trade">Tradeoff</span>');
     if (p.repeatable) badges.push('<span class="badge badge-rep">Repeatable</span>');
     if (n > 1) badges.push(`<span class="badge badge-rep">×${n}</span>`);
-    const unl = p.unlocks ? `<div class="tt-foot">${px('lock')} Unlocks: <b>${p.unlocks.map(([c, i]) => esc((contentDef(c, i) || { name: i }).name)).join(', ')}</b></div>` : '';
+    const pend = p.unlocks ? p.unlocks.filter(([c, i]) => !Build.isUnlocked(c, i)) : [];
+    const unl = pend.length ? `<div class="tt-foot">${px('lock')} Unlocks: <b>${pend.map(([c, i]) => esc((contentDef(c, i) || { name: i }).name)).join(', ')}</b></div>` : '';
     return tipHead(`<span class="ico glyph">${p.icon}</span>`, esc(p.name), `<span class="rar" style="color:${col}">${esc(RARITY[p.rarity] ? RARITY[p.rarity].name : p.rarity)}</span>`, badges.join(' ')) +
       `<div class="tt-desc">${esc(p.desc)}</div>` + unl;
   }
@@ -11327,14 +11705,8 @@ const UI = (() => {
     const c = HERO_CLASSES[cls];
     if (!c) return '';
     const b = boss ? HERO_BOSSES[boss] : null;
-    const sc = typeof heroWaveScale === 'function' ? heroWaveScale(wave)
-      : { hp: 1 + CFG.heroHpPerWave * (wave - 1), dmg: 1 + CFG.heroDmgPerWave * (wave - 1) };
-    let hp = c.hp * sc.hp, dmg = c.dmg * sc.dmg, spd = c.speed;
-    let bounty = c.gold * (1 + CFG.bountyPerWave * (wave - 1));
-    if (elite) { hp *= CFG.eliteHpMul; dmg *= CFG.eliteDmgMul; spd *= CFG.eliteSpeedMul; bounty *= CFG.eliteBountyMul; }
-    if (b) { hp *= b.hpMul; dmg *= b.dmgMul; spd *= b.speedMul; bounty *= CFG.heroBossBountyMul; }
-    if (hasPerk('midas')) hp *= 1.2;
-    if (hasPerk('blood_money')) bounty *= 2;
+    const m = heroStatMuls({ elite, boss }, wave); // the same multipliers Heroes.create and the bounty use
+    const hp = c.hp * m.hp, dmg = c.dmg * m.dmg, spd = c.speed * m.spd, bounty = c.gold * m.bounty;
     const icon = b ? iconHTML('heroBoss', boss) : iconHTML('hero', cls);
     const tags = [];
     if (b) tags.push(`<span class="badge badge-boss">${px('crown')}Boss</span>`);
@@ -11374,16 +11746,19 @@ const UI = (() => {
         `Spend it on walls, traps, monsters and objects. Earned from slain heroes, recovered loot and wave income (+${Econ.waveIncome()} after this wave). Thieves who escape steal from it.`);
       case 'mana': {
         const wells = S.structs.filter(s => s.cat === 'object' && s.id === 'well' && !s.broken).length;
-        const regen = CFG.manaRegen * (hasPerk('mana_spring') ? 1.4 : 1) + wells * OBJECTS.well.regen;
-        return tipHead(px('mana'), `Mana ${Math.floor(S.mana)} / ${S.manaMax}`, 'Fuels Dungeon Master powers') +
-          `<div class="tt-desc">Regenerates during waves and resets to ${CFG.manaStart} when a wave begins.</div>` +
-          rows([['Regeneration', `+${num(regen, 2)}/s`], ['Mana Wells', String(wells)]]);
+        const waving = S.phase === 'wave';
+        return tipHead(px('mana'), waving ? `Mana ${Math.floor(S.mana)} / ${S.manaMax}` : `Mana at wave start: ${manaAtStart()} / ${S.manaMax}`, 'Fuels Dungeon Master powers') +
+          `<div class="tt-desc">Every wave begins with ${manaAtStart()} mana, which regenerates while the wave runs.</div>` +
+          rows([['Regeneration', `+${num(Powers.manaRegen(), 2)}/s during waves`], ['Mana Wells', String(wells)]]);
       }
       case 'heart': return heartTip();
       case 'best': {
-        const d = Save.data;
-        return simpleTip(px('trophy'), 'Best run', d.runs ? `${d.runs} run${d.runs === 1 ? '' : 's'} played` : 'No runs yet',
-          d.bestWave ? `Survived ${d.bestWave} wave${d.bestWave === 1 ? '' : 's'} with ${fmtInt(d.bestKills || 0)} heroes slain.` : 'Survive a wave to set a record.');
+        const d = Save.data, now = runWaves();
+        const sub = d.runs ? plural(d.runs, 'run') + ' played' : 'No finished runs yet';
+        let t = d.bestWave ? `Record: ${plural(d.bestWave, 'wave')} survived with ${plural(d.bestKills || 0, 'hero', 'heroes')} slain.` : 'Survive a wave to set a record.';
+        if (now > (d.bestWave || 0)) t = `This run is the new record: ${plural(now, 'wave')} survived so far` + (d.bestWave ? ` (previous best ${fmtInt(d.bestWave)}).` : '.');
+        else if (now > 0) t += ` This run: ${plural(now, 'wave')}.`;
+        return simpleTip(px('trophy'), 'Best run', sub, t);
       }
       case 'speed1': case 'speed2': case 'speed4':
         return simpleTip('', 'Game speed ' + k.slice(5) + '×', 'Keys 1 · 2 · 3 during waves', 'Simulation speed for waves. Building is never timed.');
@@ -11408,57 +11783,35 @@ const UI = (() => {
   }
 
   /* ---------------------------------------------------------------------------
-   * 8. STATS — module-provided numbers with a data-table fallback
+   * 8. STATS & DESCRIPTIONS — always from the owning module (perks applied)
    * ------------------------------------------------------------------------ */
-  /** Raw per-level numbers straight from the content tables (no perks). */
-  function tableStats(cat, id, level) {
-    const d = contentDef(cat, id);
-    const out = {};
-    if (!d) return out;
-    const L = clamp(level | 0, 1, 3);
-    if (cat === 'trap') {
-      for (const k of Object.keys(d)) {
-        if (STAT_SKIP.has(k)) continue;
-        const v = d[k];
-        if (Array.isArray(v) && typeof v[0] === 'number') out[k] = v[Math.min(v.length, L) - 1];
-        else if (typeof v === 'number') out[k] = v;
-      }
-    } else if (cat === 'monster' || cat === 'boss') {
-      const mul = CFG.levelStatMul[L] || 1;
-      for (const k of Object.keys(d)) {
-        if (STAT_SKIP.has(k) || typeof d[k] !== 'number') continue;
-        out[k] = MON_SCALED.has(k) ? Math.round(d[k] * mul) : d[k];
-      }
-    }
-    return out;
-  }
-  /** Effective stats (with perks) from Traps.stats / Monsters.stats; table fallback when unavailable. */
+  /** Effective numbers for an item at a level: Traps.stats / Monsters.stats ({} for walls & objects). */
   function itemStats(cat, id, level) {
-    let r = null;
-    if (cat === 'trap' && has(typeof Traps !== 'undefined' ? Traps : null, 'stats')) r = safe(() => Traps.stats(id, level), null, 'Traps.stats');
-    else if ((cat === 'monster' || cat === 'boss') && has(typeof Monsters !== 'undefined' ? Monsters : null, 'stats')) r = safe(() => Monsters.stats(id, level), null, 'Monsters.stats');
-    if (r && typeof r === 'object' && Object.keys(r).some(k => typeof r[k] === 'number')) return r;
-    return tableStats(cat, id, level);
+    if (cat === 'trap') return Traps.stats(id, level);
+    if (cat === 'monster' || cat === 'boss') return Monsters.stats(id, level);
+    return {};
   }
-  /** Human-readable lines for a structure: the owning module's describe(), else stats. */
+  /** Human-readable lines for a structure from its module's describe(). */
   function describeStruct(s) {
-    let lines = null;
-    if (s.cat === 'trap' && has(typeof Traps !== 'undefined' ? Traps : null, 'describe')) lines = safe(() => Traps.describe(s), null, 'Traps.describe');
-    else if (s.cat === 'object' && has(typeof Objects !== 'undefined' ? Objects : null, 'describe')) lines = safe(() => Objects.describe(s), null, 'Objects.describe');
-    else if ((s.cat === 'monster' || s.cat === 'boss') && s.ent && has(typeof Monsters !== 'undefined' ? Monsters : null, 'describe')) lines = safe(() => Monsters.describe(s.ent), null, 'Monsters.describe');
-    if (Array.isArray(lines) && lines.length) return lines.map(String);
-    // Fallback: plain stat lines.
-    const st = itemStats(s.cat, s.id, s.level);
-    const out = Object.keys(st).filter(k => typeof st[k] === 'number' && !STAT_SKIP.has(k)).slice(0, 6).map(k => { const i = statInfo(k); return i.label + ': ' + i.fmt(st[k]); });
-    if (s.cat === 'object') {
-      const d = OBJECTS[s.id];
-      if (s.id === 'chest') out.push(s.data && s.data.empty ? 'Looted this wave' : `Holds ${Lures.chestValue()} gold`);
-      else if (s.id === 'torch') out.push(`Lights ${num(CFG.torchRadius)} tiles: heroes take +${pct(CFG.torchExposed)} damage`);
-      else if (s.id === 'barricade') out.push(`Health: ${fmtInt(Math.max(0, s.hp || 0))}/${fmtInt(s.maxHp || d.hp)}`);
-      else if (s.id === 'well') out.push(`+${num(d.regen)} mana per second during waves`);
-      else if (s.id === 'lair') out.push(`Spawns every ${secs(d.spawnCd)} (max ${d.maxAlive})`);
+    if (s.cat === 'trap') return Traps.describe(s);
+    if (s.cat === 'object') return Objects.describe(s);
+    return s.ent ? Monsters.describe(s.ent) : [];
+  }
+  /** Percentage of spent gold refunded on selling (Salvager: 100%). */
+  const refundPct = () => (hasPerk('salvager') ? 100 : Math.round(CFG.sellRate * 100));
+  /** Mana every wave starts with (shown outside waves instead of stale leftovers). */
+  const manaAtStart = () => Math.min(S.manaMax, CFG.manaStart);
+  /** Waves survived in the current run (0 on the title screen). */
+  const runWaves = () => (S.phase === 'title' ? 0 : S.stats.wavesSurvived || 0);
+  /** Player-built structures + non-rubble walls (walls are cached per path version). */
+  function builtCount() {
+    if (U.wallKey !== S.pathVersion) {
+      U.wallKey = S.pathVersion;
+      let n = 0;
+      for (const t of S.tiles) if (t.type === T.WALL && !t.rubble) n++;
+      U.walls = n;
     }
-    return out;
+    return S.structs.length + U.walls;
   }
 
   /* ---------------------------------------------------------------------------
@@ -11475,9 +11828,12 @@ const UI = (() => {
     }
     U.lastGold = g;
     setText(el.hudGold, fmtInt(g));
-    // Mana
-    setWidth(el.hudManaFill, S.mana / Math.max(1, S.manaMax));
-    setText(el.hudManaTxt, `${Math.floor(S.mana)} / ${S.manaMax}`);
+    // Mana: live during waves; elsewhere what the next wave starts with (leftovers are reset anyway).
+    const waving = S.phase === 'wave';
+    const mana = waving ? S.mana : manaAtStart();
+    setWidth(el.hudManaFill, mana / Math.max(1, S.manaMax));
+    setText(el.hudManaTxt, waving ? `${Math.floor(mana)} / ${S.manaMax}` : `${mana} at start`);
+    setClass(el.hudManaFill, 'idle', !waving);
     // Heart
     const hp = Math.max(0, S.heartHp);
     setWidth(el.hudHeartFill, hp / Math.max(1, S.heartMax));
@@ -11485,7 +11841,8 @@ const UI = (() => {
     setClass(el.hudHeart, 'low', S.phase !== 'title' && hp / Math.max(1, S.heartMax) <= LOW_HEART);
     if (U.lastHeart !== null && hp < U.lastHeart) { el.hudHeart.classList.remove('hit'); void el.hudHeart.offsetWidth; el.hudHeart.classList.add('hit'); }
     U.lastHeart = hp;
-    setText(el.hudBest, Math.max(Save.data.bestWave || 0, S.phase === 'title' ? 0 : S.stats.wavesSurvived || 0));
+    setText(el.hudBest, Math.max(Save.data.bestWave || 0, runWaves()));
+    setClass(el.hudBestBox, 'record', runWaves() > (Save.data.bestWave || 0));
     // Controls
     for (const b of el.speedBtns) setClass(b, 'on', Number(b.getAttribute('data-speed')) === S.speed);
     const pauseName = S.paused ? 'play' : 'pause';
@@ -11598,7 +11955,7 @@ const UI = (() => {
     const sig = cardSignature();
     if (sig !== U.cardSig) { U.cardSig = sig; renderCards(); }
     setShown(el.buildLock, S.phase === 'wave');
-    setText(el.buildNote, S.ui.tool ? 'Placing: ' + ((contentDef(S.ui.tool.cat, S.ui.tool.id) || {}).name || '') : S.phase === 'build' ? S.structs.length + ' built' : '');
+    setText(el.buildNote, S.ui.tool ? 'Placing: ' + ((contentDef(S.ui.tool.cat, S.ui.tool.id) || {}).name || '') : S.phase === 'build' ? builtCount() + ' built' : '');
   }
 
   /** Click on a build card: select / deselect that tool. */
@@ -11708,7 +12065,9 @@ const UI = (() => {
       if (s.maxHp) hpHTML = `<div class="insp-hp">HP ${hpBar(s.hp, s.maxHp, 'fill-prog')}</div>`;
       if (s.ent && (s.cat === 'monster' || s.cat === 'boss')) {
         const e = s.ent;
-        hpHTML = e.dead ? `<div class="insp-hp warn">${e.respawnT > 0 ? 'Reassembling in ' + secs(e.respawnT) : 'Fallen — returns at the next wave'}</div>`
+        const fallen = e.respawnT > 0 ? 'Reassembling in ' + secs(e.respawnT)
+          : s.broken ? 'Slain — repair its post to revive it' : 'Slain — repair its post after the wave';
+        hpHTML = e.dead ? `<div class="insp-hp warn">${fallen}</div>`
           : `<div class="insp-hp">HP ${hpBar(e.hp, e.maxHp, 'fill-mon')}</div>`;
       }
       const shown = hpHTML ? lines.filter(l => !HP_LINE.test(l)) : lines;
@@ -11739,7 +12098,7 @@ const UI = (() => {
         acts.push(actBtn('repair', px('wrench'), 'Repair', c ? c + 'g' : 'free', off, !building ? 'Repairs are made between waves.' : S.gold < c ? `Need ${c - S.gold} more gold.` : 'Restore it to working order.'));
       }
       const sv = Build.sellValue(s.x, s.y);
-      acts.push(actBtn('sell', px('coin'), 'Sell', '+' + sv + 'g', !building, building ? `Refund ${sv}g (${hasPerk('salvager') ? '100' : Math.round(CFG.sellRate * 100)}% of the gold spent). Del or right-click.` : 'Selling is only possible between waves.', 'btn-red'));
+      acts.push(actBtn('sell', px('coin'), 'Sell', '+' + sv + 'g', !building, building ? `Refund ${sv}g (${refundPct()}% of the gold spent). Del or right-click.` : 'Selling is only possible between waves.', 'btn-red'));
       m.actions = acts.join('');
       m.note = catLabel(s.cat);
       return m;
@@ -11747,7 +12106,7 @@ const UI = (() => {
     switch (t.type) {
       case T.WALL: {
         const sv = Build.sellValue(t.x, t.y);
-        m.head = inspHead(iconHTML('wall', 'wall'), t.rubble ? 'Rubble' : 'Stone Wall', t.rubble ? 'Collapsed by your power' : `Player-built · <span class="muted">paid ${fmtInt(t.paid)}g</span>`);
+        m.head = inspHead(iconHTML(t.rubble ? 'tile' : 'wall', t.rubble ? 'rubble' : 'wall'), t.rubble ? 'Rubble' : 'Stone Wall', t.rubble ? 'Collapsed by your power' : `Player-built · <span class="muted">paid ${fmtInt(t.paid)}g</span>`);
         m.lines = `<ul class="insp-lines"><li>Blocks movement and line of sight.</li>${t.rubble ? '<li>Clearing it gives no refund.</li>' : '<li>Arrow Walls can be mounted on it.</li>'}<li>Mages and Dwarf Miners can break through walls.</li></ul>`;
         m.actions = actBtn('sell', px(t.rubble ? 'hammer' : 'coin'), t.rubble ? 'Clear' : 'Sell', t.rubble ? '' : '+' + sv + 'g', !building,
           building ? (t.rubble ? 'Clear the rubble (no refund).' : `Refund ${sv}g.`) : 'Only possible between waves.', t.rubble ? '' : 'btn-red');
@@ -11765,7 +12124,7 @@ const UI = (() => {
         m.note = 'Terrain';
         return m;
       case T.HEART: {
-        m.head = inspHead(px('gem'), 'The Dungeon Heart', 'Protect it at all costs');
+        m.head = inspHead(iconHTML('tile', 'heart'), 'The Dungeon Heart', 'Protect it at all costs');
         m.lines = `<div class="insp-hp">HP ${hpBar(S.heartHp, S.heartMax, 'fill-heart')}</div><ul class="insp-lines"><li>Pulses for ${heartPulseText()}.</li><li>Regenerates ${CFG.heartRegenPerWave} HP after each wave.</li><li>If it shatters, the run ends.</li></ul>`;
         m.note = 'Heart';
         return m;
@@ -11815,7 +12174,6 @@ const UI = (() => {
    * 12. CENTRE — Start Wave bar, wave progress and board overlays
    * ------------------------------------------------------------------------ */
   function aliveHeroes() { let n = 0; for (const h of S.heroes) if (Spatial.heroAlive(h)) n++; return n; }
-  function wavesRemaining() { return has(typeof Waves !== 'undefined' ? Waves : null, 'remaining') ? safe(() => Waves.remaining(), 0, 'Waves.remaining') || 0 : 0; }
 
   function updateCentre() {
     const ph = S.phase;
@@ -11826,7 +12184,7 @@ const UI = (() => {
     setShown(el.waveProg, ph === 'wave');
     const nw = S.nextWave;
     if (building) {
-      const route = safe(() => Path.preview(), [], 'Path.preview') || [];
+      const route = Path.preview();
       const sealed = !route.length && !Path.reachable();
       const straight = Math.abs(S.heart.x - S.entrance.x) + Math.abs(S.heart.y - S.entrance.y);
       const parties = nw ? nw.parties.length : 0;
@@ -11837,13 +12195,13 @@ const UI = (() => {
       setHTML(el.wiMain, main);
       const sub = [];
       if (sealed) sub.push(`<span class="item bad">${px('bad')} The Heart is sealed off — open a path!</span>`);
-      else sub.push(`<span class="item">${px('route')} Route <b>${route.length}</b> tiles${route.length > straight ? ` <span class="good">(+${route.length - straight} from your maze)</span>` : ''}</span>`);
+      else sub.push(`<span class="item">${px('route')} Route <b>${route.length}</b> tiles${route.length > straight ? ` <span class="good">(+${route.length - straight} detour)</span>` : ''}</span>`);
       const broken = S.structs.reduce((n, s) => n + (s.broken ? 1 : 0), 0);
       if (broken) sub.push(`<span class="item warn">${px('wrench')} ${broken} broken — repair ${Build.totalRepairCost()}g</span>`);
       sub.push(`<span class="item">${px('coin')} +${Econ.waveIncome()}g after the wave</span>`);
       setHTML(el.wiSub, sub.join(''));
     } else if (ph === 'wave') {
-      const alive = aliveHeroes(), rem = wavesRemaining(), ws = S.ws || { kills: 0, escaped: 0 };
+      const alive = aliveHeroes(), rem = Waves.remaining(), ws = S.ws || { kills: 0, escaped: 0 };
       const total = Math.max(waveTotal(nw), (ws.spawned || 0) + rem, 1);
       const done = ws.kills + ws.escaped;
       setWidth(el.wpFill, done / total);
@@ -11949,7 +12307,7 @@ const UI = (() => {
     if (!ws) return;
     const alive = ph === 'wave' ? aliveHeroes() : 0;
     setText(el.lvAlive, alive);
-    setText(el.lvIncoming, ph === 'wave' ? wavesRemaining() : 0);
+    setText(el.lvIncoming, ph === 'wave' ? Waves.remaining() : 0);
     setText(el.lvSlain, ws.kills);
     setText(el.lvEscaped, ws.escaped);
     setClass(el.lvEscaped, 'bad', ws.escaped > 0);
@@ -11965,10 +12323,11 @@ const UI = (() => {
     }
     let line;
     if (best) {
-      const c = HERO_CLASSES[best.type];
-      const nm = heroName(best), cn = c ? c.name : best.type;
-      line = `${px('warn')} Closest: <b>${esc(nm)}</b>${nm !== cn ? ` <span class="muted">(${esc(cn)})</span>` : ''} · ${isFinite(bd) ? `<b class="${bd <= 6 ? 'bad' : ''}">${bd}</b> tiles to the Heart` : 'tunnelling'}`;
-    } else if (ph === 'wave') line = wavesRemaining() ? `${px('clock')} The next party is on its way…` : `${px('good')} The halls fall silent…`;
+      // Distance first so it never gets truncated; bosses need no class suffix.
+      const nm = heroName(best), cn = HERO_CLASSES[best.type].name;
+      const who = `<b>${esc(nm)}</b>${!best.boss && nm !== cn ? ` <span class="muted">(${esc(cn)})</span>` : ''}`;
+      line = isFinite(bd) ? `${px('warn')} <b class="${bd <= 6 ? 'bad' : ''}">${plural(bd, 'tile')}</b> from the Heart · ${who}` : `${px('warn')} Tunnelling · ${who}`;
+    } else if (ph === 'wave') line = Waves.remaining() ? `${px('clock')} The next party is on its way…` : `${px('good')} The halls fall silent…`;
     else line = ph === 'reward' ? `${px('good')} Every hero is dead or gone.` : '';
     setHTML(el.lvThreat, line);
     // Boss HP
@@ -11983,23 +12342,13 @@ const UI = (() => {
   }
 
   /* ---- DM powers ------------------------------------------------------------ */
-  const powerCost = id => (has(typeof Powers !== 'undefined' ? Powers : null, 'cost') ? safe(() => Powers.cost(id), POWERS[id].mana, 'Powers.cost') : POWERS[id].mana);
+  const powerCost = id => Powers.cost(id);
   /** Powers.canCast(id[, wx, wy]) normalised to {ok, reason}; the point (optional) also validates the target. */
   function powerCan(id, wx, wy) {
-    if (S.phase !== 'wave') return { ok: false, reason: 'Only during waves.' };
-    if (!has(typeof Powers !== 'undefined' ? Powers : null, 'canCast')) return { ok: false, reason: 'Unavailable.' };
-    const r = safe(() => (wx === undefined ? Powers.canCast(id) : Powers.canCast(id, wx, wy)), { ok: false, reason: 'Unavailable.' }, 'Powers.canCast');
-    return r && typeof r === 'object' ? r : { ok: !!r, reason: '' };
+    return wx === undefined ? Powers.canCast(id) : Powers.canCast(id, wx, wy);
   }
-  /** Why the last Powers.cast() failed, if the module reports it. */
-  const powerLastReason = () => (typeof Powers !== 'undefined' && Powers && typeof Powers.lastReason === 'string' ? Powers.lastReason : '');
-  function powerCd(id) {
-    if (has(typeof Powers !== 'undefined' ? Powers : null, 'cooldown')) {
-      const v = safe(() => Powers.cooldown(id), null, 'Powers.cooldown');
-      if (typeof v === 'number') return Math.max(0, v);
-    }
-    return Math.max(0, (S.powerCd && S.powerCd[id]) || 0);
-  }
+  /** Why the last Powers.cast() failed ('' after a success). Powers already floats it at the click. */
+  const powerLastReason = () => Powers.lastReason || '';
   function buildPowers() {
     el.powers.innerHTML = POWER_IDS.map(id => {
       const p = POWERS[id];
@@ -12011,7 +12360,7 @@ const UI = (() => {
     U.powerRefs = {};
     for (const b of el.powers.querySelectorAll('.power')) {
       const id = b.getAttribute('data-power');
-      U.powerRefs[id] = { btn: b, cost: b.querySelector('.pw-costn'), status: b.querySelector('.pw-status'), cdtxt: b.querySelector('.pw-cdtxt'), cd: -1, prev: 0 };
+      U.powerRefs[id] = { btn: b, cost: b.querySelector('.pw-costn'), status: b.querySelector('.pw-status'), cdtxt: b.querySelector('.pw-cdtxt'), cd: -1 };
     }
   }
   /** ~10 Hz: costs, enabled/armed state, mana bar. */
@@ -12031,7 +12380,7 @@ const UI = (() => {
       setClass(r.btn, 'nomana', S.mana < cost);
       setClass(r.btn, 'armed', armed);
       setAttr(r.btn, 'aria-disabled', can.ok ? 'false' : 'true');
-      const cd = powerCd(id);
+      const cd = Powers.cooldown(id);
       setText(r.status, armed ? 'Armed — pick a target' : can.ok ? 'Ready' : cd > 0 ? 'Recharging' : S.mana < cost ? `Needs ${Math.ceil(cost - S.mana)} more mana` : (can.reason || 'Unavailable'));
       setClass(r.status, 'ok', can.ok || armed);
     }
@@ -12041,12 +12390,8 @@ const UI = (() => {
     for (const id of POWER_IDS) {
       const r = U.powerRefs[id];
       if (!r) continue;
-      const cd = S.phase === 'wave' ? powerCd(id) : 0;
-      let max = U.cdMax[id] || POWERS[id].cd;
-      if (cd > (r.prev || 0) + 0.05) { max = Math.max(cd, 0.01); U.cdMax[id] = max; } // a new cooldown started
-      r.prev = cd;
-      const f = cd > 0 ? clamp(cd / max, 0, 1) : 0;
-      const q = Math.round(f * 200) / 200;
+      const cd = Powers.cooldown(id);
+      const q = Math.round(Powers.cooldownFrac(id) * 200) / 200; // quantised so the style is rarely rewritten
       if (q !== r.cd) { r.cd = q; r.btn.style.setProperty('--cd', q); }
       setText(r.cdtxt, cd > 0 ? (cd >= 1 ? Math.ceil(cd) + 's' : cd.toFixed(1)) : '');
     }
@@ -12111,6 +12456,7 @@ const UI = (() => {
       `<div class="title-foot"><button class="btn" data-act="help">${px('help')} How to play <kbd>H</kbd></button>` +
       `<button class="btn" data-act="mute">${px(SFX.muted ? 'mute' : 'sound')} Sound ${SFX.muted ? 'off' : 'on'} <kbd>M</kbd></button></div>`;
     openModal('title');
+    U.titleT = performance.now();
     refresh();
   }
   function bestBoxHTML(d) {
@@ -12120,10 +12466,10 @@ const UI = (() => {
     const br = d.bestRun || {};
     const perkIds = (br.perks || []).map(name => { const p = PERKS.find(q => q.name === name); return p ? p.id : null; }).filter(Boolean);
     return `<div class="best-box"><div class="bb-head">${px('trophy')} Best run${br.date ? `<span class="date">${esc(br.date)}</span>` : ''}</div>` +
-      `<div class="best-stats"><span>${px('flag')} <b>${fmtInt(d.bestWave || 0)}</b> waves survived</span><span>${px('skull')} <b>${fmtInt(d.bestKills || 0)}</b> heroes slain</span>` +
+      `<div class="best-stats"><span>${px('flag')} <b>${plural(d.bestWave || 0, 'wave')}</b> survived</span><span>${px('skull')} <b>${plural(d.bestKills || 0, 'hero', 'heroes')}</b> slain</span>` +
       (br.goldEarned != null ? `<span>${px('coin')} <b>${fmtInt(br.goldEarned)}</b> gold earned</span>` : '') +
       (br.favoriteTrap ? `<span>${px('star')} Favourite: <b>${esc(br.favoriteTrap)}</b></span>` : '') +
-      `<span class="muted">${fmtInt(d.runs || 0)} run${d.runs === 1 ? '' : 's'} played</span></div>` +
+      `<span class="muted">${plural(d.runs || 0, 'run')} played</span></div>` +
       (perkIds.length ? `<div class="best-perks">${perkIconsHTML(perkIds, null)}</div>` : '') + `</div>`;
   }
 
@@ -12135,11 +12481,11 @@ const UI = (() => {
     U.reward = { ids, t: performance.now() };
     closeModal('help');
     const bossName = sm.boss && HERO_BOSSES[sm.boss] ? HERO_BOSSES[sm.boss].name : null;
-    const bossKilled = !!sm.bossKilled || (sm.boss && S.stats.bossKills > U.bossKillsAtStart);
+    const bossKilled = !!sm.bossKilled;
     const sum = (icon, big, label, small, hl = '') => `<div class="sum${hl ? ' hl-' + hl : ''}">${px(icon)}<b>${big}</b><span>${label}</span>${small ? `<small>${small}</small>` : ''}</div>`;
     const tiles = [
       sum('skull', fmtInt(sm.kills || 0), 'Heroes slain', `of ${fmtInt(sm.spawned || 0)} who entered`, 'good'),
-      sum('coin', '+' + fmtInt(Math.max(0, sm.goldFromKills || 0)), 'Bounty & loot', 'from kills this wave', 'gold'),
+      sum('coin', '+' + fmtInt(Math.max(0, sm.goldFromKills || 0)), 'Gold earned', 'bounties, loot & perks', 'gold'),
       sum('tower', '+' + fmtInt(sm.income || 0), 'Wave income', hasPerk('midas') ? 'doubled by Midas Curse' : 'paid by your dark patrons', 'gold'),
       hasPerk('interest') || sm.interest ? sum('up', '+' + fmtInt(sm.interest || 0), 'Interest', '10% of unspent gold', 'gold')
         : sum('coin', fmtInt(S.gold), 'Treasury', 'gold to spend now', 'gold'),
@@ -12175,7 +12521,8 @@ const UI = (() => {
     const owned = S.perks[id] || 0;
     const badges = [];
     if (p.tradeoff) badges.push('<span class="badge badge-trade">Tradeoff</span>');
-    if (p.unlocks) badges.push(`<span class="badge badge-unlock">${px('lock')}Unlocks ${esc(p.unlocks.map(([c, x]) => (contentDef(c, x) || { name: x }).name).join(', '))}</span>`);
+    const pend = p.unlocks ? p.unlocks.filter(([c, x]) => !Build.isUnlocked(c, x)) : [];
+    if (pend.length) badges.push(`<span class="badge badge-unlock">${px('lock')}Unlocks ${esc(pend.map(([c, x]) => (contentDef(c, x) || { name: x }).name).join(', '))}</span>`);
     if (p.repeatable) badges.push(`<span class="badge badge-rep">${owned ? 'Owned ×' + owned : 'Repeatable'}</span>`);
     return `<div class="perk-card r-${esc(p.rarity)}" style="--rc:${col}" data-perk="${esc(id)}" role="button" tabindex="-1">` +
       `<kbd>${i + 1}</kbd><span class="rar pc-rar">${esc(RARITY[p.rarity] ? RARITY[p.rarity].name : p.rarity)}</span>` +
@@ -12215,11 +12562,12 @@ const UI = (() => {
       sum('heart', fmtInt(r.heartDamage || 0), 'Heart damage', 'bad') + sum('tower', fmtInt(r.structures || 0), 'Structures') +
       `</div>` + fav +
       `<div class="m-section">Perks collected</div>` + perks +
-      `<div class="over-best">${px('trophy')} Best run: <b>${fmtInt(best.bestWave || 0)}</b> waves · <b>${fmtInt(best.bestKills || 0)}</b> slain` +
-      (best.bestRun && best.bestRun.date ? ` <span class="muted">(${esc(best.bestRun.date)})</span>` : '') + ` · ${fmtInt(best.runs || 0)} runs</div>` +
+      `<div class="over-best">${px('trophy')} Best run: <b>${plural(best.bestWave || 0, 'wave')}</b> · <b>${fmtInt(best.bestKills || 0)}</b> slain` +
+      (best.bestRun && best.bestRun.date ? ` <span class="muted">(${esc(best.bestRun.date)})</span>` : '') + ` · ${plural(best.runs || 0, 'run')} played</div>` +
       `<div class="m-actions"><button class="btn btn-gold btn-big" data-act="restart">${px('sword')} Restart <kbd>Enter</kbd></button>` +
       `<button class="btn btn-big" data-act="totitle">Title</button></div>`;
     openModal('over');
+    U.overT = performance.now();
     refresh();
   }
 
@@ -12242,20 +12590,21 @@ const UI = (() => {
       const c = HERO_CLASSES[k];
       return `<div class="cls-row" data-tip="hero|${k}|0||${S ? S.wave : 1}">${iconHTML('hero', k)}<span><b>${esc(c.name)}</b> <span class="muted">(${esc(c.role)}, from wave ${c.minWave})</span> — ${esc(c.desc)}</span></div>`;
     }).join('');
-    const pw = POWER_IDS.map(id => { const p = POWERS[id]; return `<div class="pw-row"><kbd>${p.key}</kbd><span class="e">${p.icon}</span><span><b>${esc(p.name)}</b> <span class="manac">(${p.mana} mana)</span> — ${esc(p.desc)}</span></div>`; }).join('');
+    const pw = POWER_IDS.map(id => { const p = POWERS[id]; return `<div class="pw-row"><kbd>${p.key}</kbd><span class="e">${p.icon}</span><span><b>${esc(p.name)}</b> <span class="manac">(${Powers.cost(id)} mana)</span> — ${esc(p.desc)}</span></div>`; }).join('');
     const rar = Object.keys(RARITY).map(r => `<span><i style="border-color:${RARITY[r].color}"></i>${esc(RARITY[r].name)}</span>`).join('');
     return corners + `<button class="btn m-x" data-act="closehelp" data-tip="text|Close (Esc)">✕</button>` +
       `<h2 class="m-title">Dungeon Master's Handbook</h2><p class="m-sub">Keep the adventurers from destroying your Heart. Survive as many waves as you can.</p>` +
       `<div class="help-grid">` +
-      `<div class="help-sec"><h3>${px('hammer')} Building</h3><p>Pick a card on the left, then <b>click or drag</b> on the board. <b>Walls</b> shape a maze — heroes must always have a path to the Heart (placements that seal it are refused). With no card selected, <b>click</b> a structure to upgrade, repair or sell it; <b>right-click</b> sells instantly (${Math.round(CFG.sellRate * 100)}% refund).</p>` +
-      `<p>Traps and monsters have 3 levels. Broken traps stay broken until repaired. Only one boss may guard the dungeon.</p></div>` +
+      `<div class="help-sec"><h3>${px('hammer')} Building</h3><p>Pick a card on the left, then <b>click or drag</b> on the board. <b>Walls</b> shape a maze — heroes must always have a path to the Heart (placements that seal it are refused). With no card selected, <b>click</b> a structure to upgrade, repair or sell it; <b>right-click</b> sells instantly (${refundPct()}% refund).</p>` +
+      `<p>Traps and monsters have 3 levels. Broken traps, smashed barricades and slain monsters (except Skeletons) stay down until repaired. Only one boss may guard the dungeon.</p></div>` +
       `<div class="help-sec"><h3>${px('eye')} How heroes think</h3><ul>` +
       `<li><b>Danger memory</b> — heroes remember where companions died and traps were found, and route around it next time. It fades between waves. Toggle <b>Memory</b> to see it.</li>` +
-      `<li><b>Hidden traps</b> — most traps are invisible until triggered. Rogues detect and disarm, Rangers reveal, and <b>torchlight</b> exposes them (but heroes in light take +25% damage).</li>` +
+      `<li><b>Hidden traps</b> — most traps are invisible until triggered. Rogues detect and disarm, Rangers reveal, and <b>torchlight</b> exposes them (but heroes in light take +25% damage and can’t stay invisible).</li>` +
+      `<li><b>Morale</b> — wounded heroes fall back to a Cleric or flee the dungeon; later waves are braver and push on at lower health.</li>` +
       `<li><b>Greed</b> — chests lure heroes off their route. A hero who escapes with treasure steals your gold.</li>` +
       `<li><b>The Guild adapts</b> — it counters your build: traps draw Rogues and Rangers, mazes draw Mages and Miners, monsters draw Warriors, Clerics and Paladins.</li></ul></div>` +
       `<div class="help-sec"><h3>${px('mana')} Dungeon Master powers</h3><div class="pw-list">${pw}</div><p style="margin-top:.4rem">Mana regenerates during waves (Mana Wells add more) and resets to ${CFG.manaStart} at the start of each wave.</p></div>` +
-      `<div class="help-sec"><h3>${px('star')} Waves & perks</h3><p>Every 5th wave a <b>Hero Boss</b> leads the charge. Every 10 waves the dungeon <b>expands</b>. After each wave you earn income and choose <b>1 of 3 perks</b>.</p>` +
+      `<div class="help-sec"><h3>${px('star')} Waves & perks</h3><p>Every 5th wave a <b>Hero Boss</b> leads the charge. Every 10 waves the dungeon <b>expands</b> (a new antechamber opens in front of your intact maze). After each wave you earn income and choose <b>1 of 3 perks</b>.</p>` +
       `<div class="rar-row">${rar}</div><p style="margin-top:.35rem"><span class="badge badge-trade">Tradeoff</span> perks are double-edged; <span class="badge badge-unlock">Unlocks</span> perks grant content early.</p></div>` +
       `<div class="help-sec"><h3>${px('person')} Adventurers</h3><div class="cls-list">${cls}</div></div>` +
       `<div class="help-sec"><h3>${px('help')} Controls</h3><div class="keys">` +
@@ -12277,8 +12626,7 @@ const UI = (() => {
    * ------------------------------------------------------------------------ */
   /** Screen → world through Render; null when outside the board. */
   function worldAt(cx, cy) {
-    if (typeof Render === 'undefined' || !Render || typeof Render.screenToWorld !== 'function') return null;
-    const p = safe(() => Render.screenToWorld(cx, cy), null, 'Render.screenToWorld');
+    const p = Render.screenToWorld(cx, cy);
     return p && p.inside ? p : null;
   }
   function setHover(p) {
@@ -12414,8 +12762,11 @@ const UI = (() => {
     if (!c.ok) { SFX.play('error'); failToast(c.reason || `${POWERS[id].name} is not ready.`, 'warn'); return; }
     if (POWERS[id].target === 'none') {
       const hv = S.ui.hover;
-      const ok = safe(() => Powers.cast(id, hv ? hv.wx : Heart.cx(), hv ? hv.wy : Heart.cy()), false, 'Powers.cast');
-      if (!ok) { SFX.play('error'); failToast(powerLastReason() || powerCan(id).reason || `${POWERS[id].name} failed.`, 'warn'); }
+      // A refused cast is already floated at the target with an error buzz by Powers; toast only if it gave no reason.
+      if (!Powers.cast(id, hv ? hv.wx : Heart.cx(), hv ? hv.wy : Heart.cy()) && !powerLastReason()) {
+        SFX.play('error');
+        failToast(`${POWERS[id].name} failed.`, 'warn');
+      }
       S.ui.power = null;
     } else {
       S.ui.power = id;
@@ -12429,11 +12780,10 @@ const UI = (() => {
     if (!id) return;
     const before = powerCan(id);
     if (!before.ok) { SFX.play('error'); failToast(before.reason, 'warn'); S.ui.power = null; refreshNow(); return; }
-    const ok = safe(() => Powers.cast(id, p.wx, p.wy), false, 'Powers.cast');
-    if (ok) S.ui.power = null; // stays armed after a bad target so the player can simply click again
-    else {
+    if (Powers.cast(id, p.wx, p.wy)) S.ui.power = null; // stays armed after a bad target so the player can click again
+    else if (!powerLastReason()) { // Powers normally floats its own reason at the click — don't repeat it as a toast
       SFX.play('error');
-      failToast(powerLastReason() || castFailReason(id, p), 'warn');
+      failToast(castFailReason(id, p), 'warn');
     }
     refreshNow();
   }
@@ -12443,7 +12793,7 @@ const UI = (() => {
     if (POWERS[id].target === 'hero') {
       const h = Spatial.nearestHero(p.wx, p.wy, 0.9);
       if (!h) return 'Click directly on a hero.';
-      if (HERO_CLASSES[h.type].fearImmune || h.boss) return 'Immune to fear.';
+      if (Status.fearImmune(h)) return 'Immune to fear.';
     }
     const c = powerCan(id, p.wx, p.wy);
     return (!c.ok && c.reason) || 'Cannot cast there.';
@@ -12475,7 +12825,7 @@ const UI = (() => {
         return;
       }
       case 'gameover':
-        if (k === 'Enter' && !e.repeat) { e.preventDefault(); newRun(); }
+        if (k === 'Enter' && !e.repeat && !justOpened(U.overT)) { e.preventDefault(); newRun(); }
         return;
       case 'build': {
         if (k === 'Enter' && !e.repeat) { e.preventDefault(); startWave(); return; }
@@ -12502,6 +12852,8 @@ const UI = (() => {
   }
 
   /* ---- Commands shared by buttons and keys ----------------------------------- */
+  /** True for a moment after a modal opened, so a click meant for the board can't dismiss its summary. */
+  const justOpened = t => performance.now() - t < MODAL_GUARD_MS;
   function newRun() { SFX.play('click'); Game.newRun(); }
   function startWave() {
     if (!S || S.phase !== 'build') return;
@@ -12567,8 +12919,9 @@ const UI = (() => {
       case 'btnMute': toggleMute(); return;
       case 'btnHelp': openHelp(); return;
       case 'btnRepairAll': if (off) { SFX.play('error'); failToast(S.phase === 'build' ? 'Not enough gold to repair anything.' : 'Repairs are made between waves.', 'warn'); return; } repairAll(); return;
-      case 'newrun': case 'restart': newRun(); return;
-      case 'totitle': SFX.play('click'); Game.toTitle(); return;
+      case 'newrun': if (!justOpened(U.titleT)) newRun(); return;
+      case 'restart': if (!justOpened(U.overT)) newRun(); return;
+      case 'totitle': if (!justOpened(U.overT)) { SFX.play('click'); Game.toTitle(); } return;
       case 'continue': pickPerk(null); return;
       case 'help': openHelp(); return;
       case 'closehelp': SFX.play('click'); closeHelp(); return;
@@ -12602,7 +12955,7 @@ const UI = (() => {
     for (const t of BUILD_TABS) for (const [c, i] of t.items) if (Build.isUnlocked(c, i)) U.seen.add(c + ':' + i);
     clearToasts();
     U.cardSig = ''; U.previewSig = ''; U.previewFor = undefined; U.perkSig = null;
-    U.lastGold = null; U.lastHeart = null; U.cdMax = {};
+    U.lastGold = null; U.lastHeart = null;
     U.tab = BUILD_TABS[0].id;
     if (el.cards) el.cards.scrollTop = 0;
     endDrag();
@@ -12621,7 +12974,7 @@ const UI = (() => {
     U.resizeQueued = true;
     requestAnimationFrame(() => {
       U.resizeQueued = false;
-      if (S && typeof Render !== 'undefined' && Render && typeof Render.resize === 'function') safe(() => Render.resize(), null, 'Render.resize');
+      if (S) Render.resize();
     });
   }
   /** Everything that refreshes at ~10 Hz. */
@@ -12667,11 +13020,7 @@ const UI = (() => {
     if (phase !== 'gameover') closeModal('over');
     S.paused = false; // every phase starts running (the help overlay re-pauses a wave if it is open)
     U.helpPaused = false;
-    if (phase === 'wave') {
-      U.bossKillsAtStart = S.stats.bossKills;
-      U.cdMax = {};
-      for (const t of BUILD_TABS) markSeen(t.id); // NEW markers last until the first wave after the unlock
-    }
+    if (phase === 'wave') for (const t of BUILD_TABS) markSeen(t.id); // NEW markers last until the first wave after the unlock
     if (phase === 'build') S.ui.selected = null; // the grid may have expanded (coordinates shift)
     if (Tip.src === 'board') Tip.hide();
     refresh();
@@ -12690,11 +13039,9 @@ const UI = (() => {
    * 17. INIT
    * ------------------------------------------------------------------------ */
   function init() {
-    const need = ['app', 'boardWrap', 'tabs', 'cards', 'inspBody', 'toasts', 'tip', 'btnStart', 'previewBody', 'powers', 'perkGrid', 'mTitle', 'mReward', 'mOver', 'mHelp'];
-    if (need.some(id => !$(id))) { console.warn('[UI] shell markup missing — UI disabled.'); return; }
     hydratePixels(document);
     const ids = ['boardWrap', 'toasts', 'boardBanner', 'boardHint', 'tip', 'hudWave', 'hudBoss', 'hudGold', 'hudGoldBox', 'hudManaFill', 'hudManaTxt',
-      'hudHeart', 'hudHeartFill', 'hudHeartTxt', 'hudBest', 'btnPause', 'btnRoute', 'btnMemory', 'btnMute', 'btnHelp', 'tabs', 'cards', 'buildLock',
+      'hudHeart', 'hudHeartFill', 'hudHeartTxt', 'hudBest', 'hudBestBox', 'btnPause', 'btnRoute', 'btnMemory', 'btnMute', 'btnHelp', 'tabs', 'cards', 'buildLock',
       'buildNote', 'inspBody', 'inspNote', 'btnRepairAll', 'btnStart', 'wiMain', 'wiSub', 'waveProg', 'wpTag', 'wpFill', 'wpTxt', 'pvTitle', 'pvNote',
       'previewBody', 'liveTitle', 'liveNote', 'lvAlive', 'lvIncoming', 'lvSlain', 'lvEscaped', 'lvHeartDmg', 'lvGold', 'lvThreat', 'lvBoss',
       'pwNote', 'pwManaFill', 'pwManaTxt', 'powers', 'perkNote', 'perkGrid', 'titleCard', 'rewardCard', 'overCard', 'helpCard'];
@@ -12790,6 +13137,7 @@ const Game = {
   /** Decorative dungeon behind the title screen. */
   toTitle() {
     S = makeState();
+    Path.reset();
     Grid.init(CFG.gridSizes[0][0], CFG.gridSizes[0][1]);
     FX.clear();
     S.phase = 'title';
@@ -12798,6 +13146,7 @@ const Game = {
 
   newRun() {
     S = makeState();
+    Path.reset();
     FX.clear();
     Grid.init(CFG.gridSizes[0][0], CFG.gridSizes[0][1]);
     Light.recompute();
@@ -12913,6 +13262,7 @@ const Game = {
     S.stats.escaped++;
     if (S.ws) S.ws.escaped++;
     if (h.loot > 0) Econ.steal(h.loot, h.x + 0.5, h.y - 0.5);
+    else if (hasPerk('blood_money')) Econ.steal(Math.round(HERO_CLASSES[h.type].gold * (1 + CFG.bountyPerWave * (S.wave - 1))), h.x + 0.5, h.y - 0.5); // ×3 inside steal()
     else FX.text(h.x + 0.6, h.y - 0.5, 'Fled', '#cccccc', { size: 10 });
     h.loot = 0;
   },
@@ -12959,7 +13309,7 @@ const Game = {
     if (c > S.cols || r > S.rows) {
       Grid.expand(c, r);
       if (typeof Render !== 'undefined' && Render.resize) Render.resize();
-      UI.toast('The dungeon expands! New ground has been dug out near the entrance.', 'good');
+      UI.toast('The dungeon expands! A new antechamber lies before your old entrance — your maze is untouched. Sell old outer walls (free) to open more space.', 'good');
     }
     this.checkUnlocks(false);
     S.nextWave = Waves.generate(S.wave);

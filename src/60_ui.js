@@ -990,7 +990,9 @@ const UI = (() => {
       if (s.maxHp) hpHTML = `<div class="insp-hp">HP ${hpBar(s.hp, s.maxHp, 'fill-prog')}</div>`;
       if (s.ent && (s.cat === 'monster' || s.cat === 'boss')) {
         const e = s.ent;
-        hpHTML = e.dead ? `<div class="insp-hp warn">${e.respawnT > 0 ? 'Reassembling in ' + secs(e.respawnT) : 'Fallen — returns at the next wave'}</div>`
+        const fallen = e.respawnT > 0 ? 'Reassembling in ' + secs(e.respawnT)
+          : s.broken ? 'Slain — repair its post to revive it' : 'Slain — repair its post after the wave';
+        hpHTML = e.dead ? `<div class="insp-hp warn">${fallen}</div>`
           : `<div class="insp-hp">HP ${hpBar(e.hp, e.maxHp, 'fill-mon')}</div>`;
       }
       const shown = hpHTML ? lines.filter(l => !HP_LINE.test(l)) : lines;
@@ -1519,14 +1521,15 @@ const UI = (() => {
       `<h2 class="m-title">Dungeon Master's Handbook</h2><p class="m-sub">Keep the adventurers from destroying your Heart. Survive as many waves as you can.</p>` +
       `<div class="help-grid">` +
       `<div class="help-sec"><h3>${px('hammer')} Building</h3><p>Pick a card on the left, then <b>click or drag</b> on the board. <b>Walls</b> shape a maze — heroes must always have a path to the Heart (placements that seal it are refused). With no card selected, <b>click</b> a structure to upgrade, repair or sell it; <b>right-click</b> sells instantly (${refundPct()}% refund).</p>` +
-      `<p>Traps and monsters have 3 levels. Broken traps stay broken until repaired. Only one boss may guard the dungeon.</p></div>` +
+      `<p>Traps and monsters have 3 levels. Broken traps, smashed barricades and slain monsters (except Skeletons) stay down until repaired. Only one boss may guard the dungeon.</p></div>` +
       `<div class="help-sec"><h3>${px('eye')} How heroes think</h3><ul>` +
       `<li><b>Danger memory</b> — heroes remember where companions died and traps were found, and route around it next time. It fades between waves. Toggle <b>Memory</b> to see it.</li>` +
-      `<li><b>Hidden traps</b> — most traps are invisible until triggered. Rogues detect and disarm, Rangers reveal, and <b>torchlight</b> exposes them (but heroes in light take +25% damage).</li>` +
+      `<li><b>Hidden traps</b> — most traps are invisible until triggered. Rogues detect and disarm, Rangers reveal, and <b>torchlight</b> exposes them (but heroes in light take +25% damage and can’t stay invisible).</li>` +
+      `<li><b>Morale</b> — wounded heroes fall back to a Cleric or flee the dungeon; later waves are braver and push on at lower health.</li>` +
       `<li><b>Greed</b> — chests lure heroes off their route. A hero who escapes with treasure steals your gold.</li>` +
       `<li><b>The Guild adapts</b> — it counters your build: traps draw Rogues and Rangers, mazes draw Mages and Miners, monsters draw Warriors, Clerics and Paladins.</li></ul></div>` +
       `<div class="help-sec"><h3>${px('mana')} Dungeon Master powers</h3><div class="pw-list">${pw}</div><p style="margin-top:.4rem">Mana regenerates during waves (Mana Wells add more) and resets to ${CFG.manaStart} at the start of each wave.</p></div>` +
-      `<div class="help-sec"><h3>${px('star')} Waves & perks</h3><p>Every 5th wave a <b>Hero Boss</b> leads the charge. Every 10 waves the dungeon <b>expands</b>. After each wave you earn income and choose <b>1 of 3 perks</b>.</p>` +
+      `<div class="help-sec"><h3>${px('star')} Waves & perks</h3><p>Every 5th wave a <b>Hero Boss</b> leads the charge. Every 10 waves the dungeon <b>expands</b> (a new antechamber opens in front of your intact maze). After each wave you earn income and choose <b>1 of 3 perks</b>.</p>` +
       `<div class="rar-row">${rar}</div><p style="margin-top:.35rem"><span class="badge badge-trade">Tradeoff</span> perks are double-edged; <span class="badge badge-unlock">Unlocks</span> perks grant content early.</p></div>` +
       `<div class="help-sec"><h3>${px('person')} Adventurers</h3><div class="cls-list">${cls}</div></div>` +
       `<div class="help-sec"><h3>${px('help')} Controls</h3><div class="keys">` +

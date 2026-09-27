@@ -31,10 +31,10 @@ const Heroes = (() => {
     astarBudget: 12,                 // max routine A* searches per Heroes.update (spreads spikes)
     trapTileCost: 5,                 // known trap tile            (× trapW × smartness)
     lineCost: 2,                     // known Arrow Wall / Boulder firing line tile (× trapW × smartness)
-    heartDetour: 30,                 // walking THROUGH the Heart tile to reach somewhere else
     switchRatio: 0.82,               // route hysteresis: a new route must cost < 82% of the current one…
     switchRatioRecent: 0.5,          // …or < 50% within switchCooldown s of the last route switch
     switchCooldown: 3,
+    switchRatioWalls: 0.97,          // walls actually changed (blast/dig/barricade): take real shortcuts
     stallWindow: 4, stallMove: 0.5,  // hard anti-stall: < 0.5 tiles net in 4 s while trying to move…
     plainTime: 5,                    // …→ follow a plain Path.baseCost route for this long
     teleportGiveUp: 3,               // teleported back this many times: a normal hero gives up and leaves
@@ -42,6 +42,9 @@ const Heroes = (() => {
     jamTime: 1.5,
     rubbleCost: 25,                  // sealed in by a Collapse: claw through rubble…
     rubbleDigTime: 4,                // …taking this long per tile
+    sealedWallCost: 40,              // (still sealed: hack through a player wall, never rock…
+    sealedDigTime: 6,                // …even more slowly)
+    watchdogWindow: 20, watchdogMove: 1.5,  // last-resort watchdog (see watchdog())
     fleeR: 3, fleeW: 3,              // feared: extra cost near the source of the terror
     // Movement
     wallMargin: 0.28,                // hero centres ease this far away from solid tile edges…
@@ -55,7 +58,8 @@ const Heroes = (() => {
     // Strategy
     rushDist: 6, rushExit: 9,        // Path.heartDist hysteresis for the final rush
     retreatPct: 0.3, recoverPct: 0.65, retreatMinDist: 6,
-    healerSeekR: 8,                  // retreating heroes fall back to a Cleric this close
+    healerSeekR: 8,                  // retreating heroes fall back to a Cleric this close…
+    tendR: 7, tendMax: 15,           // …who holds position (≤ tendMax s) while they come to it
     heartReach: 1.3, heartReachRanged: 2.5,
     heartCrowdReach: 2.8,            // mobbed Heart: strike over allies' shoulders from this close
     slotSeekR: 3.5,                  // stalled this close to the Heart → walk round to a free side
@@ -66,6 +70,8 @@ const Heroes = (() => {
     blockR: 0.9,                     // a monster this close that targets us blocks movement
     leash: 3,                        // max distance a hero strays off its route to chase
     ignoreT: 3,                      // after giving up a chase, ignore that monster this long
+    noDmgWindow: 6, noDmgIgnore: 8,  // in reach but it takes no net damage for 6 s (shots blocked,
+                                     // out-regenerated…) → ignore it for 8 s and move on
     chaseGiveUp: 4,                  // seconds out of reach before a chase is abandoned
     attackedR: 4.5,                  // monsters targeting us within this range → fight back
     tauntR: 2,                       // Orcish Warcry taunt radius
@@ -216,12 +222,12 @@ const Heroes = (() => {
       const t = S.tiles[i];
       let c;
       if (t.type === T.WALL) {
+        // cDig: 0 none · 1 miner tunnels · 2 sealed in: rubble only · 3 sealed in: any player wall
         if (ai.cDig === 0 || (ai.cDig === 2 && !t.rubble)) return Infinity;
-        c = ai.cDigCost;                                   // miner tunnels / rubble clawing
+        c = ai.cDig === 3 && !t.rubble ? K.sealedWallCost : ai.cDigCost;
       } else {
-        c = Path.baseCost(x, y, i);                        // rock = ∞, barricades cost extra
+        c = Path.baseCost(x, y, i);                        // rock = ∞, barricades & the Heart cost extra
         if (c === Infinity) return c;
-        if (t.type === T.HEART && !ai.cHeartGoal) c += K.heartDetour;
       }
       if (ai.cCareful) c += S.danger[i] * ai.cDw + field[i] * ai.cTw;
       if (ai.cFear) {
@@ -240,7 +246,6 @@ const Heroes = (() => {
     ai.cCareful = !paranoia && !ai.rushing && ai.plainT <= 0;
     ai.cDw = (c.dangerW || 0) * h.smart;
     ai.cTw = (c.trapW || 0) * h.smart;
-    ai.cHeartGoal = kind === 'heart';
     ai.cDig = h.type === 'miner' && kind === 'heart' ? 1 : 0;
     ai.cDigCost = 3 + digTimeOf(h) * 2;
     ai.cFear = kind === 'flee';
@@ -272,13 +277,17 @@ const Heroes = (() => {
   /** Goals that don't move: their routes get hysteresis (moving goals just re-plan). */
   const STATIC_GOALS = { heart: true, slot: true, exit: true, flee: true };
 
-  /** Sum of the hero's current cost over path[from..] (the tile it stands on excluded); ∞ if blocked. */
+  /**
+   * Sum of the hero's current cost over path[from..]; ∞ if blocked. The tile it
+   * stands on and the shared goal tile are excluded so route comparisons are fair.
+   */
   function pathCost(h, path, from) {
-    const cost = h.ai.cost, cols = S.cols, cx = Math.floor(h.x), cy = Math.floor(h.y);
+    const ai = h.ai, cost = ai.cost, cols = S.cols, cx = Math.floor(h.x), cy = Math.floor(h.y);
     let sum = 0;
     for (let k = from; k < path.length; k++) {
       const p = path[k];
       if (k === from && p.x === cx && p.y === cy) continue;
+      if (k === path.length - 1 && p.x === ai.gx && p.y === ai.gy) continue;
       if (!Grid.inb(p.x, p.y)) return Infinity;
       const c = cost(p.x, p.y, p.y * cols + p.x);
       if (!(c < Infinity)) return Infinity;
@@ -306,14 +315,16 @@ const Heroes = (() => {
     const critical = !h.path || ai.noPath;
     if (budget <= 0 && !critical) return false;
     budget--;
-    const old = h.path, oldIdx = h.pathIdx;
+    const old = h.path, oldIdx = h.pathIdx, wallsChanged = ai.pathVer !== S.pathVersion;
     const sticky = !critical && STATIC_GOALS[ai.gk] && ai.plainT <= 0 && old.length > oldIdx;
     prepCost(h, ai.gk);
     let p = Path.astar(h.x, h.y, ai.gx, ai.gy, ai.cost);
     if (!p && ai.cDig !== 1) {
-      // Sealed in (e.g. by a Collapse around us): allow clawing through rubble.
+      // Sealed in (e.g. by a Collapse around us): claw through rubble, or failing
+      // that hack through player walls (never rock) — a hero can always get out.
       ai.cDig = 2; ai.cDigCost = K.rubbleCost;
       p = Path.astar(h.x, h.y, ai.gx, ai.gy, ai.cost);
+      if (!p) { ai.cDig = 3; p = Path.astar(h.x, h.y, ai.gx, ai.gy, ai.cost); }
       if (!p) ai.cDig = 0;
     }
     ai.pathVer = S.pathVersion; ai.dangerVer = S.dangerVersion; ai.trapVer = trapVer;
@@ -325,7 +336,8 @@ const Heroes = (() => {
         const a = firstStep(h, old, oldIdx), b = firstStep(h, p, 0);
         const turns = !!a && !!b && (a.x !== b.x || a.y !== b.y);
         if (turns) {
-          const need = S.time - ai.switchT < K.switchCooldown ? K.switchRatioRecent : K.switchRatio;
+          const need = wallsChanged ? K.switchRatioWalls
+            : S.time - ai.switchT < K.switchCooldown ? K.switchRatioRecent : K.switchRatio;
           if (pathCost(h, p, 0) > oldCost * need - 0.5) return true;   // commit to the current route
           ai.switchT = S.time;
         }
@@ -570,6 +582,32 @@ const Heroes = (() => {
     ai.stallWin = 0; ai.stallT = 0; ai.stallX = h.x; ai.stallY = h.y;
   }
 
+  /**
+   * Last-resort watchdog for states the stall check can't see (no route at all,
+   * standing by a healer that never heals, endless waiting…): outside fights,
+   * channels, barricade smashing and the Heart, < 1.5 tiles of net progress in
+   * 20 s (and not simply queued in a crowd) → drop every soft goal and walk a
+   * plain route; a second strike makes a normal hero give up and leave.
+   */
+  function watchdog(h, dt) {
+    const ai = h.ai;
+    if (ai.engage || h.channel || ai.atHeart || ai.smash) { ai.wdT = 0; ai.wdX = h.x; ai.wdY = h.y; return; }
+    if ((ai.wdT += dt) < K.watchdogWindow) return;
+    const moved = Math.hypot(h.x - ai.wdX, h.y - ai.wdY);
+    ai.wdT = 0; ai.wdX = h.x; ai.wdY = h.y;
+    if (moved >= K.watchdogMove) { ai.wdStrikes = 0; return; }
+    if (ai.queueT > 0 || crowded(h)) return;              // just waiting its turn behind allies
+    ai.wdStrikes++;
+    releaseLure(h);
+    ai.healer = null; ai.noHealer = true; ai.slot = null;
+    ai.plainT = K.plainTime * 2; ai.waitCd = K.watchdogWindow;
+    h.path = null; ai.repathT = 0;
+    if (ai.wdStrikes >= 2 && !h.boss && !ai.gaveUp) {
+      ai.gaveUp = true;
+      FX.text(h.x + 0.6, h.y - 1, 'Enough of this!', '#ffd0a0', { size: 10 });
+    }
+  }
+
   /** Bounced back to the entrance (Teleporter Pad). Normal heroes give up after a few bounces. */
   function onTeleported(h) {
     const ai = h.ai;
@@ -598,7 +636,7 @@ const Heroes = (() => {
       if (!monsterOk(m) || (pred && !pred(m))) continue;
       const dx = m.x - h.x, dy = m.y - h.y, d2 = dx * dx + dy * dy;
       if (d2 > bd) continue;
-      if (ai.ignore.size && (ai.ignore.get(m.uid) || 0) > S.time) continue;
+      if (ignored(h, m)) continue;
       if (needLos && !Grid.los(h.x, h.y, m.x, m.y)) continue;
       bd = d2; best = m;
     }
@@ -609,7 +647,7 @@ const Heroes = (() => {
     if (h.st.invisT > 0) return null;       // monsters can't see (or block) an invisible hero
     let best = null, bd = K.blockR * K.blockR;
     for (const m of S.monsters) {
-      if (!monsterOk(m) || !targetsHero(m, h)) continue;
+      if (!monsterOk(m) || !targetsHero(m, h) || ignored(h, m)) continue;   // (one we can't hurt can't pin us)
       const dx = m.x - h.x, dy = m.y - h.y, d2 = dx * dx + dy * dy;
       if (d2 <= bd) { bd = d2; best = m; }
     }
@@ -627,7 +665,8 @@ const Heroes = (() => {
     const ai = h.ai;
     ai.engage = null; ai.engageKind = ''; h.target = null; ai.lostT = 0;
   }
-  function ignoreMonster(h, m) { h.ai.ignore.set(m.uid, S.time + K.ignoreT); }
+  function ignoreMonster(h, m, dur) { h.ai.ignore.set(m.uid, S.time + (dur || K.ignoreT)); }
+  const ignored = (h, m) => h.ai.ignore.size > 0 && (h.ai.ignore.get(m.uid) || 0) > S.time;
 
   /** Is the current engagement still worth pursuing? */
   function keepEngage(h, c, m) {
@@ -700,6 +739,12 @@ const Heroes = (() => {
     if (d <= reach && (!c.ranged || ai.los || d < 1.1)) {
       ai.anchored = true; ai.lostT = 0;
       faceToward(h, m.x);
+      // Fight watchdog: a target that takes no net damage while we pound it is a stalemate.
+      if (ai.chkTarget !== m) { ai.chkTarget = m; ai.chkT = 0; ai.chkHp = m.hp; }
+      if ((ai.chkT += dt) >= K.noDmgWindow) {
+        if (m.hp >= ai.chkHp - 0.5) { ignoreMonster(h, m, K.noDmgIgnore); clearEngage(h); ai.chkTarget = null; return; }
+        ai.chkT = 0; ai.chkHp = m.hp;
+      }
       if (h.atkT <= 0 && Status.canAct(h)) attack(h, c, m);
       return;
     }
@@ -734,7 +779,7 @@ const Heroes = (() => {
     if (c.ranged) {
       const bolt = c.proj === 'bolt';
       Proj.spawn({
-        kind: c.proj || 'arrow', x: h.x + h.face * 0.25, y: h.y - 0.25, team: 'hero', target: m,
+        kind: c.proj || 'arrow', x: h.x, y: h.y, team: 'hero', target: m,   // from the LOS-checked centre
         speed: bolt ? 7.5 : 10, dmg, src: h.ai.src, radius: 0.3, range: h.range + 4,
       });
       SFX.play(bolt ? 'magic' : 'arrow');
@@ -772,7 +817,7 @@ const Heroes = (() => {
     if (c.ranged && d > 1.4) {
       heartTarget.x = hx; heartTarget.y = hy;
       Proj.spawn({
-        kind: c.proj || 'arrow', x: h.x + h.face * 0.25, y: h.y - 0.25, team: 'hero', target: heartTarget,
+        kind: c.proj || 'arrow', x: h.x, y: h.y, team: 'hero', target: heartTarget,
         speed: c.proj === 'bolt' ? 7.5 : 10, dmg: h.heartDmg, src: ai.src, radius: 0.3, range: 8, onHit: heartHit,
       });
       SFX.play(c.proj === 'bolt' ? 'magic' : 'arrow');
@@ -981,13 +1026,14 @@ const Heroes = (() => {
   function canDig(h, x, y) {
     const t = Grid.tile(x, y), ai = h.ai;
     if (!t || t.type !== T.WALL) return false;
-    return ai.cDig === 1 || (ai.cDig === 2 && t.rubble);
+    return ai.cDig === 1 || ai.cDig === 3 || (ai.cDig === 2 && t.rubble);
   }
 
   function startDig(h, x, y) {
-    const rubble = h.ai.cDig === 2;
-    startChannel(h, 'dig', rubble ? K.rubbleDigTime : digTimeOf(h), x, y, null);
-    h.channel.rubble = rubble;
+    const mode = h.ai.cDig, rubble = Grid.tile(x, y).rubble;
+    const time = mode === 1 ? digTimeOf(h) : rubble ? K.rubbleDigTime : K.sealedDigTime;
+    startChannel(h, 'dig', time * (mode !== 1 && hasPerk('reinforced') ? 2 : 1), x, y, null);
+    h.channel.rubble = mode !== 1;          // "clawing out" rather than a miner's tunnel
   }
 
   /** Rogue: known armed trap on the next tile → roll once; success = channel a disarm. */
@@ -1294,7 +1340,7 @@ const Heroes = (() => {
       // pathing (goal + cost parameters)
       gx: -1, gy: -1, gk: '', pathVer: -1, dangerVer: -1, trapVer: -1, lastRepath: -99,
       repathT: 0, noPath: false,
-      cost: null, cCareful: true, cDw: 0, cTw: 0, cDig: 0, cDigCost: 0, cHeartGoal: true, cFear: false, cFx: 0, cFy: 0,
+      cost: null, cCareful: true, cDw: 0, cTw: 0, cDig: 0, cDigCost: 0, cFear: false, cFx: 0, cFy: 0,
       // strategic flags
       rushing: false, retreating: false, escaping: false, atHeart: false, heartR: K.heartReach, fleeing: false,
       healer: null, healerT: 0,
@@ -1302,7 +1348,7 @@ const Heroes = (() => {
       anchored: false, wantMove: false, waiting: false, charging: false, smash: null,
       // combat
       engage: null, engageKind: '', anchorX: h.x, anchorY: h.y, lostT: 0, losT: 0, los: true,
-      ignore: new Map(), thinkT: Math.random() * K.thinkEvery, scanT: 0,
+      ignore: new Map(), thinkT: Math.random() * K.thinkEvery, scanT: 0, chkTarget: null, chkT: 0, chkHp: 0,
       slip: false, slipT: 0,
       src: { team: 'hero', kind: 'hero', id: h.type, ent: h, elem: c.holy ? 'holy' : h.type === 'mage' ? 'magic' : 'phys' },
       // greed
@@ -1311,14 +1357,15 @@ const Heroes = (() => {
       detectT: Math.random() * K.detectEvery, revealT: Math.random() * K.revealEvery,
       healT: Math.random() * (c.healCd || 2), blastT: randRange(2, 5), lohUsed: false,
       disarmOk: new Set(), disarmFail: new Set(), abilityRetry: 0,
-      // cohesion
-      waitT: 0, waitCd: 0,
+      // cohesion (and clerics tending the wounded)
+      waitT: 0, waitCd: 0, tendT: 0, tending: false,
       // movement bookkeeping
       sx: 0, sy: 0, queueT: 0, pushT: 0, crowdT: 0, slot: null, tickX: h.x, tickY: h.y, netMove: 0,
       stuckWin: 0, stuckAcc: 0, stuckN: 0, lastPX: h.x, lastPY: h.y,
       // anti-stall / route commitment / teleport loops
       switchT: -99, plainT: 0, stallWin: 0, stallT: 0, stallX: h.x, stallY: h.y, stalls: 0,
       teleports: 0, gaveUp: false, blinkT: -99,
+      wdT: 0, wdX: h.x, wdY: h.y, wdStrikes: 0, noHealer: false,
     };
     h.ai = ai;
     ai.cost = makeCost(h);
@@ -1359,9 +1406,26 @@ const Heroes = (() => {
     }
   }
 
+  /**
+   * Cleric: hold position while a wounded ally falls back to us to be healed
+   * (capped, so a cleric never waits forever).
+   */
+  function tendWounded(h, dt) {
+    const ai = h.ai;
+    let need = false;
+    for (const o of S.heroes) {
+      if (o === h || !alive(o) || !o.ai || !o.ai.retreating || o.ai.healer !== h) continue;
+      const dx = o.x - h.x, dy = o.y - h.y;
+      if (dx * dx + dy * dy <= K.tendR * K.tendR) { need = true; break; }
+    }
+    if (!need) { ai.tendT = 0; return false; }
+    ai.tendT += dt;
+    return ai.tendT < K.tendMax;
+  }
+
   /** A party member that is marching with the group (not fleeing, retreating, escaping or rushing). */
   function followable(o) {
-    return !!o.ai && !o.ai.retreating && !o.ai.escaping && !o.ai.rushing && o.st.fearT <= 0 && isFinite(o.ai.hd);
+    return !!o.ai && !o.ai.retreating && !o.ai.escaping && !o.ai.gaveUp && !o.ai.rushing && o.st.fearT <= 0 && isFinite(o.ai.hd);
   }
 
   /** Should this party member stop and wait for the others? */
@@ -1402,7 +1466,7 @@ const Heroes = (() => {
     // Retreating (to a healer or out) / escaping with treasure / giving up.
     if (ai.escaping || ai.retreating || ai.gaveUp) {
       if (ai.retreating && !ai.escaping && !ai.gaveUp) {
-        if ((ai.healerT -= dt) <= 0) { ai.healerT = 0.5; ai.healer = findHealer(h); }
+        if ((ai.healerT -= dt) <= 0) { ai.healerT = 0.5; ai.healer = ai.noHealer ? null : findHealer(h); }
         const hl = ai.healer;
         if (hl && alive(hl)) {
           if (dist(h.x, h.y, hl.x, hl.y) <= 1.3) { ai.anchored = true; faceToward(h, hl.x); opportunistic(h, c); return; }
@@ -1429,6 +1493,7 @@ const Heroes = (() => {
     if (!ai.rushing) {
       if (greedTick(h, c)) return;
       if (h.type === 'mage' && ai.blastT <= 0 && blastEvalFree && tryBlast(h, c)) return;
+      if (h.type === 'cleric' && tendWounded(h, dt)) { ai.waiting = true; ai.tending = true; ai.anchored = true; opportunistic(h, c); return; }
       if (cohesionWait(h, dt)) { ai.waiting = true; ai.anchored = true; opportunistic(h, c); return; }
     }
     const g = (h.party && h.party.goal) || S.heart;
@@ -1506,7 +1571,7 @@ const Heroes = (() => {
     if ((ai.slipT -= dt) <= 0) { ai.slipT = K.slipEvery; ai.slip = chance(K.slipChance); }
     if (ai.plainT > 0) ai.plainT -= dt;
     if (h.boss && h.abilityT > 0) h.abilityT = Math.max(0, h.abilityT - dt);
-    ai.anchored = false; ai.wantMove = false; ai.waiting = false; ai.charging = false; ai.smash = null;
+    ai.anchored = false; ai.wantMove = false; ai.waiting = false; ai.tending = false; ai.charging = false; ai.smash = null;
     h.moving = false;
     ai.netMove = Math.hypot(h.x - ai.tickX, h.y - ai.tickY);   // last step's net motion (incl. shoves)
     ai.tickX = h.x; ai.tickY = h.y;
@@ -1516,7 +1581,7 @@ const Heroes = (() => {
 
     // ---- incapacitated / terrified
     if (st.stunT > 0) { cancelChannel(h); ai.anchored = true; h.state = 'stunned'; return; }
-    if (st.fearT > 0) { fleeTick(h, dt); h.state = 'fear'; if (alive(h)) { stuckCheck(h, dt); stallCheck(h, dt); } return; }
+    if (st.fearT > 0) { fleeTick(h, dt); h.state = 'fear'; if (alive(h)) { stuckCheck(h, dt); stallCheck(h, dt); watchdog(h, dt); } return; }
     if (ai.fleeing) { ai.fleeing = false; h.path = null; ai.repathT = 0; }
 
     // ---- strategy, passive kits, engagement
@@ -1531,14 +1596,14 @@ const Heroes = (() => {
     else if (ai.atHeart) heartTick(h, c);
     else moveTick(h, c, dt);
 
-    if (alive(h)) { h.state = deriveState(h); stuckCheck(h, dt); stallCheck(h, dt); }
+    if (alive(h)) { h.state = deriveState(h); stuckCheck(h, dt); stallCheck(h, dt); watchdog(h, dt); }
   }
 
   function promote(p) {
     let best = null, bs = -Infinity;
     for (const m of p.members) {
       m.leader = false;
-      if (!alive(m) || (m.ai && m.ai.escaping)) continue;
+      if (!alive(m) || (m.ai && (m.ai.escaping || m.ai.gaveUp))) continue;
       const s = (m.boss ? 1000 : 0) + (LEADER_RANK[m.type] || 0) * 10 + (m.elite ? 5 : 0) + Math.min(4, m.maxHp / 1000);
       if (s > bs) { bs = s; best = m; }
     }
@@ -1625,7 +1690,8 @@ const Heroes = (() => {
     blastEvalFree = true;
     refreshField();
     for (const p of S.parties) {
-      if (p && p.members && (!p.leader || !alive(p.leader) || (p.leader.ai && p.leader.ai.escaping))) promote(p);
+      const L = p && p.leader;
+      if (p && p.members && (!L || !alive(L) || (L.ai && (L.ai.escaping || L.ai.gaveUp)))) promote(p);
     }
     const hs = S.heroes;
     for (let i = 0; i < hs.length; i++) { const h = hs[i]; if (alive(h)) tickHero(h, dt); }
@@ -1692,6 +1758,7 @@ const Heroes = (() => {
     switch (h.state) {
       case 'advance':
         if (ai.smash) return 'Smashing a barricade';
+        if (ai.tending) return 'Tending the wounded';
         if (ai.waiting) return h.leader ? 'Waiting for the party' : 'Waiting for the leader';
         if (h.loot > 0) return 'Hauling treasure to the Heart';
         return h.leader ? 'Leading the party' : 'Advancing';

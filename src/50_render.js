@@ -469,61 +469,6 @@ const Sprites = (() => {
       '........................',
     ]],
   };
-  DEFS.b_dragon = {
-    pal: pal({ R: '#b8202e', r: '#7a1020', Q: '#e2504e', Y: '#ffb040', y: '#e07020', H: '#efe6cc', E: '#ffe040', W: '#fff8e0', V: '#8a1428', v: '#56081a', k: '#1a0608' }),
-    frames: [[
-      '........................',
-      '..v.......v.............',
-      '..vv.....vVv.......HH...',
-      '..vVv...vVVv......HRRH..',
-      '..vVVv.vVVVv.....RRRRRR.',
-      '...vVVvVVVVv....RQRREkRR',
-      '...vVVVVVVVv....RRRRRRRR',
-      '....vVVVVVVv...rRRRRWrWr',
-      '....vVVVVVv....RRRrrrrr.',
-      '.....vVVVVv...RRRr......',
-      '......vVVv...RRRr.......',
-      '.......rRRRRRRRr........',
-      '.....RRRRRRRRRRRr.......',
-      '....RRRRYYYYYYRRRr......',
-      '...RRRRYYyYYyYYRRr......',
-      '..RRr.RYYYYYYYYRRr......',
-      '.RRr..rRYYyYYYRRr.......',
-      'RRr....rRRRRRRRr........',
-      'Rr.....RRr...RRr........',
-      'r......RRr...RRr........',
-      '.......kkk...kkk........',
-      '........................',
-      '........................',
-      '........................',
-    ], [
-      '........................',
-      '........................',
-      '...................HH...',
-      '..................HRRH..',
-      '.................RRRRRR.',
-      '................RQRREkRR',
-      '................RRRRRRRR',
-      '...............rRRRRWrWr',
-      '...............RRRrrrrr.',
-      '..............RRRr......',
-      '.............RRRr.......',
-      '.v.....rRRRRRRRRr.......',
-      '.vVvvvRRRRRRRRRRRr......',
-      '..vVVVVRYYYYYYRRRr......',
-      '..vVVVVVYyYYyYYRRr......',
-      '...vVVVVVYYYYYYRRr......',
-      '.RRvVVVVvYyYYYRRr.......',
-      'RRr.vvVVvRRRRRRr........',
-      'Rr.....RRr...RRr........',
-      'r......RRr...RRr........',
-      '.......kkk...kkk........',
-      '........................',
-      '........................',
-      '........................',
-    ]],
-  };
-
   // ---------------- Objects (16×16)
   const CHEST_PAL = pal({ D: '#8a5a2c', d: '#5e3a1a', Q: '#b07a40', G: '#e8b84a', g: '#a07a22', K: '#241410' });
   DEFS.o_chest = {
@@ -933,7 +878,7 @@ const Sprites = (() => {
             if (inside) set(x, y, c);
           }
       },
-      get(x, y) { return b.px[y * b.w + x]; },
+      get(x, y) { return x >= 0 && y >= 0 && x < b.w && y < b.h ? b.px[y * b.w + x] : 0; },
     };
   }
 
@@ -990,6 +935,64 @@ const Sprites = (() => {
     for (let y = 0; y < g.length; y++) for (let x = 0; x < g[y].length; x++) {
       const ch = g[y][x]; if (ch !== '.') p.set(x, y + 2, cp[ch]);
     }
+  } };
+  /** Dragon (24×24): crimson body with a fiery belly; wings (drawn behind) up / spread. */
+  const DRAGON_BODY = [
+    '........................',
+    '........................',
+    '...................HH...',
+    '..................HRRH..',
+    '.................RRRRRR.',
+    '................RQRREkRR',
+    '................RRRRRRRR',
+    '...............rRRRRWrWr',
+    '...............RRRrrrrr.',
+    '..............RRRr......',
+    '.............RRRr.......',
+    '.......rRRRRRRRr........',
+    '.....RRQQRRRRRRRr.......',
+    '....RRRRYYYYYYRRRr......',
+    '...RRRRYYyYYyYYRRr......',
+    '..RRr.RYYYYYYYYRRr......',
+    '.RRr..rRYYyYYYRRr.......',
+    'RRr....rRRRRRRRr........',
+    'Rr.....RRr...RRr........',
+    'r......RRr...RRr........',
+    '.......kkk...kkk........',
+    '........................',
+  ];
+  const DRAGON_PAL = { R: '#b8202e', r: '#7a1020', Q: '#e2504e', Y: '#ffb040', y: '#e07020', H: '#efe6cc', E: '#ffe040', W: '#fff8e0', k: '#1a0608' };
+  PROCS.b_dragon = { frames: 2, w: 24, h: 24, paint(p, f) {
+    const up = f === 0;
+    const mem = '#8a1428', dark = '#5a0a1a', bone = '#c8303a';
+    if (up) {
+      p.poly([[14, 11], [16, 9], [18, 3], [15, 6]], dark); // far wing peeking out
+      p.poly([[9, 13], [13, 11], [11, 5], [9, 0], [7, 4], [2, 1], [3, 7], [1, 9], [6, 10]], mem);
+      p.poly([[9, 13], [13, 11], [8, 9], [3, 8], [6, 11]], dark);
+      p.line(12, 11, 9, 0, bone); p.line(11, 11, 2, 1, bone); p.line(10, 12, 1, 9, bone);
+    } else {
+      p.poly([[9, 13], [13, 11], [10, 9], [4, 8], [0, 11], [1, 14], [4, 13], [6, 15]], mem);
+      p.poly([[9, 13], [13, 11], [7, 12], [3, 14], [6, 15]], dark);
+      p.line(12, 11, 4, 8, bone); p.line(11, 12, 0, 11, bone); p.line(10, 12, 3, 14, bone);
+    }
+    for (let y = 0; y < DRAGON_BODY.length; y++) for (let x = 0; x < 24; x++) {
+      const ch = DRAGON_BODY[y][x];
+      if (ch !== '.') p.set(x, y + (up ? 0 : 1), DRAGON_PAL[ch]);
+    }
+  } };
+  /** Slime puddle: irregular translucent blob with a darker rim, sheen and bubbles. */
+  PROCS.t_slime = { frames: 1, w: 16, h: 16, outline: false, paint(p) {
+    const body = '#3aa02ad0';
+    p.ellipse(8, 9, 6.8, 4.3, body); p.ellipse(4, 11.6, 3, 1.9, body); p.ellipse(11.8, 6.4, 2.8, 2, body); p.ellipse(12.8, 11.8, 2.2, 1.5, body);
+    const px = [];
+    for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) if (p.get(x, y)) px.push([x, y]);
+    for (const [x, y] of px) {
+      const edge = !p.get(x - 1, y) || !p.get(x + 1, y) || !p.get(x, y - 1) || !p.get(x, y + 1) || x === 0 || y === 0 || x === 15 || y === 15;
+      if (edge) p.set(x, y, '#1f6a1ae0');
+      else if (Math.hypot(x - 7, (y - 8.5) * 1.4) < 2.8) p.set(x, y, '#5ccc40d8');
+    }
+    p.set(5, 7, '#d8ffc0'); p.set(6, 6, '#d8ffc0'); p.set(11, 4, '#b8f8a0');
+    for (const [bx, by] of [[9, 10], [4, 11], [12, 6]]) { p.set(bx, by - 1, '#a8f088'); p.set(bx - 1, by, '#a8f088'); p.set(bx + 1, by, '#a8f088'); p.set(bx, by + 1, '#2f8a24'); }
   } };
   /** Dungeon Heart: faceted crimson crystal heart (24×24). */
   PROCS.heart = { frames: 1, w: 24, h: 24, paint(p) {
@@ -1070,12 +1073,6 @@ const Sprites = (() => {
       p.set(8 + Math.cos(a) * r, 8 + Math.sin(a) * r, t < 0.35 ? '#ffffff' : t < 0.7 ? '#9ae4ff' : '#3a9aff');
     }
   } };
-  /** Slime puddle (translucent green with highlight). */
-  PROCS.t_slime = { frames: 1, w: 16, h: 16, outline: false, paint(p) {
-    p.ellipse(8, 8.5, 6.8, 5.6, '#3aa02ad8', (nx, ny) => nx < -0.3 && ny < -0.3 ? '#7ae05ae0' : ny > 0.6 ? '#2a7a22d8' : null);
-    p.ellipse(4, 11.5, 2.4, 1.8, '#3aa02ad8'); p.ellipse(12.5, 4.5, 2, 1.5, '#3aa02ad8');
-    p.set(5, 6, '#c8ffa8'); p.set(6, 5, '#c8ffa8'); p.set(10, 9, '#9af07a');
-  } };
   /** Small flame, 3 flicker frames (torches, burning). */
   PROCS.flame = { frames: 3, w: 8, h: 12, outline: false, paint(p, f) {
     const sway = [0, 1, -1][f];
@@ -1147,7 +1144,7 @@ const Sprites = (() => {
   } };
 
   /* ---- 1.5 Rasterizer -------------------------------------------------------- */
-  const V = { NORMAL: 0, WHITE: 1, ELITE: 2, RISEN: 3, GREY: 4, CORPSE: 5 };
+  const V = { NORMAL: 0, WHITE: 1, ELITE: 2, RISEN: 3, GREY: 4, CORPSE: 5, RIM: 6 };
   const recs = {};
   let ready = false;
 
@@ -1224,6 +1221,7 @@ const Sprites = (() => {
     switch (variant) {
       case V.WHITE: return pack(255, 255, 255, a);
       case V.ELITE: return isEdge ? pack(255, 214, 72, 255) : v;
+      case V.RIM: return isEdge ? pack(255, 200, 58, 255) : 0;
       case V.RISEN:
         if (isEdge) return pack(40, 8, 56, a);
         return pack(Math.min(255, r * 0.55 + 60) | 0, Math.min(255, g * 0.4 + 22) | 0, Math.min(255, b * 0.7 + 110) | 0, a);
@@ -1242,6 +1240,7 @@ const Sprites = (() => {
       if (!(v >>> 24)) continue;
       const sx = flip ? w - 1 - x : x;
       const nv = variantPixel(v, b.edge ? b.edge[y * w + x] === 1 : false, variant);
+      if (!nv) continue;
       if (rot) out[sx * cw + (h - 1 - y)] = nv; else out[y * cw + sx] = nv;
     }
     g.putImageData(img, 0, 0);
@@ -1446,24 +1445,12 @@ const Sprites = (() => {
     if (!c) c = r.cache[key] = makeCanvas(r, fi, variant | 0, !!flip);
     return c;
   }
-  /** Convenience: canvas by sprite name. */
-  function get(name, frame = 0, variant = 0, flip = false) { const r = rec(name); return r ? canvasOf(r, frame, variant, flip) : null; }
 
   /* ---- 1.9 UI icons (cached PNG data URLs) --------------------------------------- */
   const icons = {};
   const ICON = 72;
-  function spriteNameFor(kind, id) {
-    switch (kind) {
-      case 'hero': return 'h_' + id;
-      case 'heroBoss': return 'hb_' + id;
-      case 'monster': return 'm_' + id;
-      case 'boss': return 'b_' + id;
-      case 'object': return 'o_' + id;
-      case 'trap': return 't_' + id;
-      default: return null;
-    }
-  }
-  /** Draw a sprite centred & bottom-aligned into an icon canvas at an integer scale. */
+  const ICON_PREFIX = { hero: 'h_', monster: 'm_', object: 'o_' };
+  /** Draw a sprite centred into an icon canvas at an integer scale (dy nudges it vertically). */
   function iconSprite(g, name, scale, frame = 0, dy = 0) {
     const r = rec(name); if (!r) return;
     const c = canvasOf(r, frame, 0, false);
@@ -1512,7 +1499,7 @@ const Sprites = (() => {
       iconSprite(g, 'hb_' + id, 4);
       return;
     }
-    const name = spriteNameFor(kind, id);
+    const name = ICON_PREFIX[kind] ? ICON_PREFIX[kind] + id : null;
     if (name && rec(name)) iconSprite(g, name, 4);
   }
   /** Cached PNG data URL for a UI icon: kinds wall|trap|monster|boss|object|hero|heroBoss|tile. */
@@ -1531,10 +1518,10 @@ const Sprites = (() => {
   }
 
   return {
-    V, init, rec, get, canvasOf, glow, punch, iconURL, drawSolid, drawFloor,
+    V, init, rec, canvasOf, glow, punch, iconURL, drawSolid, drawFloor,
+    /** Aura colour of a hero boss (drawn behind it and used for its name/cooldown ring). */
     heroBossAura(id) { const sk = HERO_BOSS_SKINS[id]; return sk ? sk.aura : '#ffffff'; },
-    PENNANT_COLS,
-    /** Names of every sprite (debug sprite sheets / tests). */
+    /** Names of every sprite (Render resolves its lookup tables from this). */
     names() { init(); return Object.keys(recs); },
   };
 })();
@@ -1570,10 +1557,11 @@ const Render = (() => {
   const R = {}, HERO = {}, HBOSS = {}, MON = {}, BOSS = {};
   const HBOSS_AURA = {};
   const HBOSS_SHORT = {};
+  const CRACKS = [];            // Heart crack overlays by stage (1..3)
 
   // Re-used per-frame scratch
   const drawList = [];
-  const heartMarker = { y: 0, isHeart: true };
+  const heartMarker = { y: 0, dead: false }; // stands in for the Heart in the depth sort
   const fonts = [];
   const LMAX = 700;
   const lx = new Float32Array(LMAX), ly = new Float32Array(LMAX), lr = new Float32Array(LMAX);
@@ -1592,10 +1580,11 @@ const Render = (() => {
     for (const id of Object.keys(HERO_BOSSES)) {
       HBOSS[id] = R['hb_' + id];
       HBOSS_AURA[id] = Sprites.heroBossAura(id);
-      HBOSS_SHORT[id] = HERO_BOSSES[id].name.split(/,| the /)[0];
+      HBOSS_SHORT[id] = HERO_BOSSES[id].name.split(/,| the /)[0].trim().split(' ').pop(); // 'Aldric', 'Velyra', …
     }
     for (const id of Object.keys(MONSTERS)) MON[id] = R['m_' + id];
     for (const id of Object.keys(BOSSES)) BOSS[id] = R['b_' + id];
+    for (let i = 1; i <= 3; i++) CRACKS[i] = R['heart_crack' + i];
   }
 
   /* ---- 2.2 Canvas sizing & input mapping ------------------------------------ */
@@ -1627,28 +1616,52 @@ const Render = (() => {
     fit();
   }
 
-  /** Fit the canvas (CSS size) into its parent keeping the aspect ratio, centred. */
+  /** Size taken by the canvas's in-flow siblings (they share the container with the board). */
+  function siblingSpace(parent) {
+    let w = 0, h = 0, n = 0;
+    for (const c of parent.children) {
+      if (c === canvas) continue;
+      const cs = getComputedStyle(c);
+      if (cs.display === 'none' || cs.position === 'absolute' || cs.position === 'fixed') continue;
+      const r = c.getBoundingClientRect();
+      w += r.width + (parseFloat(cs.marginLeft) || 0) + (parseFloat(cs.marginRight) || 0);
+      h += r.height + (parseFloat(cs.marginTop) || 0) + (parseFloat(cs.marginBottom) || 0);
+      n++;
+    }
+    return { w, h, n };
+  }
+  /**
+   * Fit the canvas (CSS size) into its parent's content box keeping the aspect
+   * ratio, preferring integer pixel scales, and centre it (relative offsets, so
+   * it works for block, flex and grid parents alike).
+   */
   function fit() {
     if (!canvas || !W) return;
     const parent = canvas.parentElement;
     const st = canvas.style;
     // Collapse first so a content-sized parent reports the space it really has.
     st.width = '0px'; st.height = '0px'; st.position = 'relative'; st.left = '0px'; st.top = '0px'; st.display = 'block';
-    let aw = 0, ah = 0;
     const useWindow = !parent || parent === document.body || parent === document.documentElement;
+    let bl = 0, bt = 0, bw = window.innerWidth, bh = window.innerHeight, shared = false;
     if (!useWindow) {
-      const cs = getComputedStyle(parent);
-      aw = parent.clientWidth - (parseFloat(cs.paddingLeft) || 0) - (parseFloat(cs.paddingRight) || 0);
-      ah = parent.clientHeight - (parseFloat(cs.paddingTop) || 0) - (parseFloat(cs.paddingBottom) || 0);
+      const cs = getComputedStyle(parent), pr = parent.getBoundingClientRect();
+      const pl = parseFloat(cs.paddingLeft) || 0, pt = parseFloat(cs.paddingTop) || 0;
+      bl = pr.left + parent.clientLeft + pl; bt = pr.top + parent.clientTop + pt;
+      bw = parent.clientWidth - pl - (parseFloat(cs.paddingRight) || 0);
+      bh = parent.clientHeight - pt - (parseFloat(cs.paddingBottom) || 0);
+      const sib = siblingSpace(parent);
+      if (sib.n) { // share the box with other in-flow children; let the layout place us
+        shared = true;
+        if (cs.display.indexOf('flex') >= 0 && cs.flexDirection.indexOf('row') === 0) bw -= sib.w; else bh -= sib.h;
+      }
+      if (!(bw > 60 && bh > 60)) { bw = window.innerWidth; bh = window.innerHeight; shared = true; }
     }
-    if (!(aw > 60 && ah > 60)) { aw = window.innerWidth; ah = window.innerHeight; }
     const own = getComputedStyle(canvas);
     pad.l = (parseFloat(own.paddingLeft) || 0) + (parseFloat(own.borderLeftWidth) || 0);
     pad.r = (parseFloat(own.paddingRight) || 0) + (parseFloat(own.borderRightWidth) || 0);
     pad.t = (parseFloat(own.paddingTop) || 0) + (parseFloat(own.borderTopWidth) || 0);
     pad.b = (parseFloat(own.paddingBottom) || 0) + (parseFloat(own.borderBottomWidth) || 0);
-    aw -= pad.l + pad.r; ah -= pad.t + pad.b;
-    let s = Math.max(0.1, Math.min(aw / W, ah / H));
+    let s = Math.max(0.1, Math.min((bw - pad.l - pad.r) / W, (bh - pad.t - pad.b) / H));
     // Prefer an integer number of device pixels per art pixel when it costs little space.
     const dpr = window.devicePixelRatio || 1;
     const snapS = Math.floor(s * ART * dpr) / (ART * dpr);
@@ -1657,19 +1670,12 @@ const Render = (() => {
     st.width = cw + 'px'; st.height = ch + 'px';
     // Upscaling: keep pixels crisp; downscaling: let the browser filter smoothly.
     st.imageRendering = s * dpr >= RS - 1e-6 ? 'pixelated' : 'auto';
-    // Centre inside the target box (parent content box, or the viewport) whatever the layout mode.
-    const cr = canvas.getBoundingClientRect();
-    let bl = 0, bt = 0, bw = window.innerWidth, bh = window.innerHeight;
-    if (!useWindow) {
-      const pr = parent.getBoundingClientRect(), cs = getComputedStyle(parent);
-      bl = pr.left + parent.clientLeft + (parseFloat(cs.paddingLeft) || 0);
-      bt = pr.top + parent.clientTop + (parseFloat(cs.paddingTop) || 0);
-      bw = parent.clientWidth - (parseFloat(cs.paddingLeft) || 0) - (parseFloat(cs.paddingRight) || 0);
-      bh = parent.clientHeight - (parseFloat(cs.paddingTop) || 0) - (parseFloat(cs.paddingBottom) || 0);
-      lastPW = parent.clientWidth; lastPH = parent.clientHeight;
-    } else { lastPW = window.innerWidth; lastPH = window.innerHeight; }
-    st.left = Math.round(bl + Math.max(0, (bw - cr.width) / 2) - cr.left) + 'px';
-    st.top = Math.round(bt + Math.max(0, (bh - cr.height) / 2) - cr.top) + 'px';
+    if (!shared) {
+      const cr = canvas.getBoundingClientRect();
+      st.left = Math.round(bl + Math.max(0, (bw - cr.width) / 2) - cr.left) + 'px';
+      st.top = Math.round(bt + Math.max(0, (bh - cr.height) / 2) - cr.top) + 'px';
+    }
+    if (useWindow) { lastPW = window.innerWidth; lastPH = window.innerHeight; } else { lastPW = parent.clientWidth; lastPH = parent.clientHeight; }
   }
   /** Cheap periodic check: refit when the container changed size (layout changes, panels). */
   function checkParent() {
@@ -1819,8 +1825,8 @@ const Render = (() => {
     else e._ridle = (e._ridle || 0) + dt;
     return e._ridle < 0.12 && !e.dead;
   }
-  function drawShadow(px, py, w) {
-    ctx.globalAlpha = 0.9;
+  function drawShadow(px, py, w, a) {
+    ctx.globalAlpha = 0.9 * a;
     ctx.drawImage(Sprites.canvasOf(R.shadow, 0, 0, false), px - w / 2, py - w * 0.19, w, w * 0.38);
   }
   /** Draw a sprite record bottom-centred at (px, footY). */
@@ -1859,7 +1865,7 @@ const Render = (() => {
     const px = h.x * TS + lungeX, py = h.y * TS + lungeY + FOOT + (boss ? 2 : 0);
     const flip = h.face < 0;
     let variant = h.flashT > 0 ? V.WHITE : h.elite ? V.ELITE : h.risen ? V.RISEN : V.NORMAL;
-    if (!h.dead) drawShadow(px, py, boss ? 34 : 22);
+    if (!h.dead) drawShadow(px, py, boss ? 34 : 22, alpha);
     if (boss && !h.dead) {
       const pulse = 0.5 + 0.2 * Math.sin(time * 3 + h.bob);
       ctx.globalCompositeOperation = 'lighter'; ctx.globalAlpha = pulse * alpha;
@@ -1878,6 +1884,7 @@ const Render = (() => {
       const top = drawSprite(r, fi, variant, flip, px, py - bob * ART, scale);
       if (st && st.rootT > 0) { ctx.globalAlpha = 0.85 * alpha; ctx.drawImage(Sprites.canvasOf(R.i_root, 0, 0, false), snap(px - 8), snap(py - 9), 16, 16); }
       h._rvis = true; h._rpx = px; h._rpy = py; h._rtop = top;
+      h._rrec = r; h._rfr = fi; h._rflip = flip; h._rsc = scale; h._rfoot = py - bob * ART;
     }
     ctx.globalAlpha = 1;
   }
@@ -1928,7 +1935,7 @@ const Render = (() => {
     const px = m.x * TS + lungeX, py = m.y * TS + lungeY + FOOT + (m.isBoss ? 4 : 0);
     const flip = m.face < 0;
     const variant = m.flashT > 0 ? V.WHITE : m.risen ? V.RISEN : V.NORMAL;
-    if (!m.dead) drawShadow(px, py, m.isBoss ? 40 : (m.type === 'orc' ? 26 : 22));
+    if (!m.dead) drawShadow(px, py, m.isBoss ? 40 : (m.type === 'orc' ? 26 : 22), 1);
     const st = m.st;
     if (!m.dead && st && st.buffT > 0) {
       ctx.globalCompositeOperation = 'lighter'; ctx.globalAlpha = 0.45 + 0.15 * Math.sin(time * 10 + m.uid);
@@ -1958,6 +1965,7 @@ const Render = (() => {
       }
       if (st && st.rootT > 0) { ctx.globalAlpha = 0.85; ctx.drawImage(Sprites.canvasOf(R.i_root, 0, 0, false), snap(px - 8), snap(py - 9), 16, 16); }
       m._rvis = true; m._rpx = px; m._rpy = py; m._rtop = top;
+      m._rrec = r; m._rfr = fi; m._rflip = flip; m._rsc = scale; m._rfoot = py - bob;
     }
     ctx.globalAlpha = 1;
   }
@@ -1974,7 +1982,9 @@ const Render = (() => {
   }
 
   let heartBeat = 0;
+  const heartRect = { x: 0, y: 0, w: 0, h: 0, on: false };
   function drawHeart() {
+    heartRect.on = false;
     const cx = (S.heart.x + 0.5) * TS, cy = (S.heart.y + 0.5) * TS;
     const max = Math.max(1, S.heartMax), ratio = Math.max(0, S.heartHp) / max;
     if (S.heartHp <= 0 && (S.phase === 'gameover' || S.endingT >= 0)) {
@@ -1998,8 +2008,9 @@ const Render = (() => {
     const x = snap(cx - w / 2), y = snap(cy - 6 - hover - h + 8 * sc);
     const variant = S.heartHitT > 0 ? V.WHITE : V.NORMAL;
     ctx.drawImage(Sprites.canvasOf(R.heart, 0, variant, false), x, y, w, h);
+    heartRect.x = x; heartRect.y = y; heartRect.w = w; heartRect.h = h; heartRect.on = true;
     const stage = ratio < 0.25 ? 3 : ratio < 0.5 ? 2 : ratio < 0.75 ? 1 : 0;
-    if (stage && variant === V.NORMAL) ctx.drawImage(Sprites.canvasOf(R['heart_crack' + stage], 0, 0, false), x, y, w, h);
+    if (stage && variant === V.NORMAL) ctx.drawImage(Sprites.canvasOf(CRACKS[stage], 0, 0, false), x, y, w, h);
     // Rune ring on the altar glows with the beat.
     ctx.globalCompositeOperation = 'lighter';
     ctx.globalAlpha = 0.25 + 0.3 * heartBeat;
@@ -2007,15 +2018,24 @@ const Render = (() => {
     ctx.globalCompositeOperation = 'source-over'; ctx.globalAlpha = 1;
   }
 
-  const byY = (a, b) => (a.dead ? a.y - 0.6 : a.y) - (b.dead ? b.y - 0.6 : b.y);
+  const sortKey = e => (e.dead ? e.y - 0.6 : e.y);
+  /** In-place insertion sort by depth (stable, allocation-free; n is at most a few hundred). */
+  function sortByDepth(arr) {
+    for (let i = 1; i < arr.length; i++) {
+      const e = arr[i], k = sortKey(e);
+      let j = i - 1;
+      while (j >= 0 && sortKey(arr[j]) > k) { arr[j + 1] = arr[j]; j--; }
+      arr[j + 1] = e;
+    }
+  }
   function drawEntities() {
     drawList.length = 0;
     const hs = S.heroes, ms = S.monsters;
     for (let i = 0; i < hs.length; i++) { const h = hs[i]; if (!h.removed && !h.escaped) drawList.push(h); else h._rvis = false; }
     for (let i = 0; i < ms.length; i++) { const m = ms[i]; if (!m.removed) drawList.push(m); else m._rvis = false; }
-    heartMarker.y = S.heart.y + 0.8; heartMarker.dead = false;
+    heartMarker.y = S.heart.y + 0.8;
     drawList.push(heartMarker);
-    drawList.sort(byY);
+    sortByDepth(drawList);
     for (let i = 0; i < drawList.length; i++) {
       const e = drawList[i];
       if (e === heartMarker) drawHeart();
@@ -2053,7 +2073,7 @@ const Render = (() => {
     ctx.drawImage(Sprites.canvasOf(R.arrow_emblem, 0, variant, false), x + 6, y + 4, 20, 20);
     ctx.fillStyle = '#07050a';
     for (let d = 0; d < 4; d++) {
-      const [dx, dy] = DIR_OPEN[d];
+      const dx = DIR_OPEN[d][0], dy = DIR_OPEN[d][1];
       if (!tileOpen(s.x + dx, s.y + dy)) continue;
       if (dy === 1) ctx.fillRect(x + 12, y + 24, 8, 4);
       else if (dy === -1) ctx.fillRect(x + 12, y, 8, 3);
@@ -2259,10 +2279,14 @@ const Render = (() => {
       const dx = p.dx || 0, dy = p.dy || 0;
       switch (p.kind) {
         case 'arrow': {
-          ctx.strokeStyle = '#d8c8a0'; ctx.lineWidth = 1.5; ctx.globalAlpha = 1;
-          ctx.beginPath(); ctx.moveTo(x - dx * 9, y - dy * 9); ctx.lineTo(x + dx * 3, y + dy * 3); ctx.stroke();
-          ctx.fillStyle = '#e8ecf4'; ctx.fillRect(x + dx * 4 - 1.5, y + dy * 4 - 1.5, 3, 3);
-          ctx.fillStyle = '#ff5a4a'; ctx.fillRect(x - dx * 9 - 1, y - dy * 9 - 1, 2, 2);
+          ctx.globalAlpha = 0.35; ctx.strokeStyle = '#fff6d8'; ctx.lineWidth = 1; // motion streak
+          ctx.beginPath(); ctx.moveTo(x - dx * 18, y - dy * 18); ctx.lineTo(x - dx * 9, y - dy * 9); ctx.stroke();
+          ctx.globalAlpha = 1; ctx.strokeStyle = '#1a1014'; ctx.lineWidth = 3.5;
+          ctx.beginPath(); ctx.moveTo(x - dx * 10, y - dy * 10); ctx.lineTo(x + dx * 4, y + dy * 4); ctx.stroke();
+          ctx.strokeStyle = '#e0cc9a'; ctx.lineWidth = 1.5;
+          ctx.beginPath(); ctx.moveTo(x - dx * 10, y - dy * 10); ctx.lineTo(x + dx * 3, y + dy * 3); ctx.stroke();
+          ctx.fillStyle = '#f4f7fc'; ctx.fillRect(x + dx * 4 - 2, y + dy * 4 - 2, 4, 4);
+          ctx.fillStyle = '#ff5a4a'; ctx.fillRect(x - dx * 10 - 1.5, y - dy * 10 - 1.5, 3, 3);
           break;
         }
         case 'boulder': {
@@ -2335,7 +2359,8 @@ const Render = (() => {
     const ms = S.monsters;
     for (let i = 0; i < ms.length; i++) {
       const m = ms[i];
-      if (m.dead || m.removed || m.disguised) continue;
+      if (m.dead || m.removed) continue;
+      if (m.disguised) { addLight(m.x, m.y, 0.8, 0.25, L_GOLD, 0.06); continue; } // same faint glint as a real chest
       if (m.type === 'lich') addLight(m.x, m.y - 0.9, 1.8, 0.6, L_GREEN, 0.28);
       else if (m.type === 'dragon') addLight(m.x, m.y - 0.3, 1.6, 0.5, L_FIRE, m.state === 'breath' ? 0.5 : 0.15);
       else if (m.type === 'imp') addLight(m.x, m.y - 0.4, 1.0, 0.4, L_FIRE, 0.12);
@@ -2477,6 +2502,28 @@ const Render = (() => {
     else if (t !== h._rchT) { h._rchDown = t < h._rchT; h._rchT = t; }
     const k = Math.max(0, Math.min(1, t / max));
     return h._rchDown ? 1 - k : k;
+  }
+  /** Post-lighting accents so they always pop: hit flashes, elite gold rims, Heart hit flash. */
+  function drawAccents() {
+    const hs = S.heroes;
+    for (let i = 0; i < hs.length; i++) {
+      const h = hs[i];
+      if (!h._rvis || h.dead || h.removed || h.escaped || !h._rrec) continue;
+      const a = h.st && h.st.invisT > 0 ? 0.35 : 1;
+      if (h.flashT > 0) { ctx.globalAlpha = 0.85 * a; drawSprite(h._rrec, h._rfr, V.WHITE, h._rflip, h._rpx, h._rfoot, h._rsc); }
+      else if (h.elite) { ctx.globalAlpha = (0.5 + 0.2 * Math.sin(time * 4 + h.uid)) * a; drawSprite(h._rrec, h._rfr, V.RIM, h._rflip, h._rpx, h._rfoot, h._rsc); }
+    }
+    const ms = S.monsters;
+    for (let i = 0; i < ms.length; i++) {
+      const m = ms[i];
+      if (!m._rvis || m.dead || m.removed || m.disguised || !m._rrec || !(m.flashT > 0)) continue;
+      ctx.globalAlpha = 0.85; drawSprite(m._rrec, m._rfr, V.WHITE, m._rflip, m._rpx, m._rfoot, m._rsc);
+    }
+    if (heartRect.on && S.heartHitT > 0) {
+      ctx.globalAlpha = Math.min(1, S.heartHitT / 0.25) * 0.8;
+      ctx.drawImage(Sprites.canvasOf(R.heart, 0, V.WHITE, false), heartRect.x, heartRect.y, heartRect.w, heartRect.h);
+    }
+    ctx.globalAlpha = 1;
   }
   function drawEntityHUD() {
     const wave = S.phase === 'wave';
@@ -2679,17 +2726,19 @@ const Render = (() => {
   function drawPathPreview() {
     const path = Path.preview();
     if (!path || !path.length) return;
-    const n = path.length, total = n * TS, spacing = 8;
-    const off = (time * 20) % spacing;
+    const n = path.length, total = n * TS, spacing = 9;
+    const off = (time * 22) % spacing;
     for (let d = off; d < total; d += spacing) {
       const seg = (d / TS) | 0, f = (d - seg * TS) / TS;
       const a = seg === 0 ? S.entrance : path[seg - 1], b = path[seg];
       if (!a || !b) continue;
       const x = (a.x + 0.5 + (b.x - a.x) * f) * TS, y = (a.y + 0.5 + (b.y - a.y) * f) * TS;
       const k = d / total;
-      ctx.globalAlpha = 0.9;
-      ctx.fillStyle = '#0b060d'; ctx.fillRect(Math.round(x) - 2, Math.round(y) - 2, 4, 4);
-      ctx.fillStyle = RAMP[(k * 15) | 0]; ctx.fillRect(Math.round(x) - 1, Math.round(y) - 1, 2, 2);
+      const big = ((d - off) / spacing | 0) % 4 === 0; // every 4th dot is larger: reads as flow
+      const rr = big ? 3 : 2;
+      ctx.globalAlpha = 0.95;
+      ctx.fillStyle = '#0b060d'; ctx.fillRect(Math.round(x) - rr, Math.round(y) - rr, rr * 2, rr * 2);
+      ctx.fillStyle = RAMP[(k * 15) | 0]; ctx.fillRect(Math.round(x) - rr + 1, Math.round(y) - rr + 1, rr * 2 - 2, rr * 2 - 2);
     }
     ctx.globalAlpha = 1;
   }
@@ -2849,9 +2898,8 @@ const Render = (() => {
       ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 2.5;
       ctx.beginPath(); ctx.arc(x + 16, y + 16, 7, 0, TAU); ctx.moveTo(x + 11, y + 21); ctx.lineTo(x + 21, y + 11); ctx.stroke();
       label('BLOCKS PATH', x + 16, y - 6, '#ff6a6a', 8);
-    } else {
-      const cost = Build.cost(tool.cat, tool.id);
-      label(cost + 'g', x + 16, y + TS + 5, ok ? '#ffd84a' : '#ff6a6a', 8);
+    } else if (contentDef(tool.cat, tool.id)) {
+      label(Build.cost(tool.cat, tool.id) + 'g', x + 16, y + TS + 5, ok ? '#ffd84a' : '#ff6a6a', 8);
     }
     ctx.globalAlpha = 1;
   }
@@ -2958,6 +3006,7 @@ const Render = (() => {
     drawFlames();
     drawProjectiles();
     drawLighting();
+    drawAccents();
     drawStructHUD();
     drawEntityHUD();
     drawFX();

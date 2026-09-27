@@ -180,10 +180,12 @@ const Game = {
 
   endWave() {
     const ws = S.ws;
+    // Interest is paid on the gold you held going into the payout (before wave income).
+    let interest = 0;
+    if (hasPerk('interest')) interest = Math.min(75, Math.floor(S.gold * 0.1));
     const income = Econ.waveIncome();
     Econ.gain(income);
-    let interest = 0;
-    if (hasPerk('interest')) { interest = Math.min(75, Math.floor(S.gold * 0.1)); Econ.gain(interest); }
+    if (interest > 0) Econ.gain(interest);
     const healed = Math.min(CFG.heartRegenPerWave, S.heartMax - S.heartHp);
     S.heartHp += healed;
     Danger.decay();

@@ -223,7 +223,7 @@ const Game = {
     if (c > S.cols || r > S.rows) {
       Grid.expand(c, r);
       if (typeof Render !== 'undefined' && Render.resize) Render.resize();
-      UI.toast('The dungeon expands! New ground has been dug out near the entrance.', 'good');
+      UI.toast('The dungeon expands! A new antechamber lies before your old entrance — your maze is untouched. Sell old outer walls (free) to open more space.', 'good');
     }
     this.checkUnlocks(false);
     S.nextWave = Waves.generate(S.wave);

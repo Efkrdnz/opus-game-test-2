@@ -296,7 +296,7 @@ value, `describe(s)` → string[].
   `Monsters.summon(pick(['goblin','skeleton']), x+0.5, y+0.5, {temp:true, lair:s})`.
 
 ### 4.3 `Monsters` (src/31_monsters.js)
-Exports: `create(struct)`, `summon(type, x, y, opts)`, `refreshStats(m)`, `update(dt)`,
+Exports: `create(struct)`, `summon(type, x, y, opts)`, `refreshStats(m)`, `revive(m)`, `update(dt)`,
 `idle(dt)`, `onWaveStart()`, `onWaveEnd()`, `onDeath(m, src)`, `alarm(x, y, radius, dur)`,
 `stateLabel(m)`, `describe(m)` → string[], `stats(type, level)` → object.
 - `create(s)`: entity for `MONSTERS[s.id]` or `BOSSES[s.id]` at the post tile centre, stats ×
@@ -331,7 +331,10 @@ Exports: `create(struct)`, `summon(type, x, y, opts)`, `refreshStats(m)`, `updat
 - `alarm(x,y,r,dur)`: every living monster within r gets `Status.apply(m,'buff',{dmg:1.5, spd:1.3, dur})`
   and moves to (x,y) (state chase toward that point; engages heroes it sees).
 - `onWaveStart`: all placed monsters alive, full HP, at post, statuses cleared, bosses' ability ready
-  after 2 s, mimics disguised. `onWaveEnd`: remove temp, revive/heal placed ones at posts.
+  after 2 s, mimics disguised (posts marked `broken` stay down). `onWaveEnd`: remove temp summons;
+  heal surviving placed monsters at their posts; a slain placed non-skeleton monster or boss marks
+  its post `broken` (revived only by `Build.repair`, cost = 30% of gold invested, via
+  `Monsters.revive(m)`); skeletons always reassemble.
 - `idle(dt)`: build-phase: keep monsters at posts, gentle bob (no AI).
 
 ### 4.4 `Waves`, `Perks`, `Powers` (src/40_director.js)

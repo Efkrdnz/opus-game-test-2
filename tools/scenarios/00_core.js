@@ -181,6 +181,17 @@
     H.assert(H.DH.Grid.tile(S.entrance.x, S.entrance.y).type === T.ENTRANCE, 'entrance at new edge');
   });
 
+  add('core: expansion preserves the maze (route never gets shorter)', H => {
+    const S = H.S;
+    let flip = false;
+    for (let c = 3; c <= S.heart.x - 3; c += 3) { const gap = flip ? S.rows - 2 : 1; flip = !flip; for (let y = 1; y < S.rows - 1; y++) if (y !== gap) { const t = H.DH.Grid.tile(c, y); if (t.type === 0 && !t.s) H.wall(c, y); } }
+    const before = H.DH.Path.preview().length;
+    S.wave = 10; S.phase = 'reward';
+    H.DH.Game.pickPerk(null);
+    const after = H.DH.Path.preview().length;
+    H.assert(after >= before, `route ${before} → ${after}`);
+  });
+
   add('core: game over records best run in localStorage', H => {
     const S = H.S;
     S.wave = 7;

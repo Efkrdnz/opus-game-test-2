@@ -196,7 +196,7 @@ const HERO_CLASSES = {
 const HERO_BOSSES = {
   champion: {
     name: 'Sir Aldric the Unbroken', title: 'The Champion', base: 'warrior',
-    hpMul: 6, dmgMul: 1.8, speedMul: 0.95, ability: 'Shield Bash', abilityCd: 6,
+    hpMul: 4, dmgMul: 1.4, speedMul: 0.95, ability: 'Shield Bash', abilityCd: 6,
     desc: 'Every 6s slams the ground, stunning monsters within 1.8 tiles for 2s and dealing heavy damage.',
   },
   archmage: {
@@ -338,7 +338,7 @@ const OBJECTS = {
   },
   torch: {
     name: 'Torch', cost: 15, unlock: 1,
-    desc: 'Heroes in its light are Exposed (+25% damage taken) — but hidden traps in the light are visible to them.',
+    desc: 'Heroes in its light are Exposed (+25% damage taken) and can’t stay invisible — but hidden traps in the light are visible to them.',
   },
   barricade: {
     name: 'Barricade', cost: 30, unlock: 1, hp: 160,

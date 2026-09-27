@@ -124,8 +124,9 @@ const Grid = {
   },
 
   /**
-   * Expand the dungeon to a larger size (called between waves). New space is
-   * added on the entrance (left) side and split top/bottom; everything shifts.
+   * Expand the dungeon to a larger size (called between waves). A new antechamber is dug out
+   * on the entrance (left) side and the frame grows by a row top and bottom; everything shifts
+   * and the old dungeon (maze included) is preserved behind its old outer wall.
    */
   expand(cols, rows) {
     if (cols <= S.cols && rows <= S.rows) return false;
@@ -147,10 +148,13 @@ const Grid = {
       if (!nt) continue;
       if (x === oc - 1) { nt.type = T.ROCK; nt.s = ot.s; continue; } // right border stays; keeps mounted Arrow Walls
       if (oldBorder) {
-        // The old left/top/bottom edge opens up (incl. the old entrance) — except rock carrying an
-        // Arrow Wall, which stays as a pillar (it was solid already, so no route is lost).
+        // The old outer wall is KEPT so the player's maze survives the expansion: only the old
+        // entrance opens into the newly dug antechamber. The rest becomes plain player stone
+        // (sells for 0g to reclaim space; Mages and Miners can breach it). Rock carrying an
+        // Arrow Wall stays rock with its trap.
+        if (ot.type === T.ENTRANCE) { nt.type = T.FLOOR; continue; }
         if (ot.s) { nt.type = T.ROCK; nt.s = ot.s; continue; }
-        nt.type = T.FLOOR; continue;
+        nt.type = T.WALL; nt.paid = 0; nt.rubble = false; continue;
       }
       nt.type = ot.type; nt.s = ot.s; nt.paid = ot.paid; nt.rubble = ot.rubble; nt.deco = ot.deco;
       S.danger[ny * cols + nx] = oldDanger[y * oc + x];
@@ -705,7 +709,13 @@ const Status = {
     if (st.invisT > 0) st.invisT -= dt;
     if (e.flashT > 0) e.flashT -= dt;
     if (e.animT > 0) e.animT -= dt;
-    if (e.team === 'hero') st.exposed = Light.isLit(e.x, e.y);
+    if (e.team === 'hero') {
+      st.exposed = Light.isLit(e.x, e.y);
+      if (st.exposed && st.invisT > 0) { // torchlight reveals heroes: invisibility breaks in the light
+        st.invisT = 0;
+        FX.text(e.x, e.y - 0.8, 'Revealed!', '#ffd27a', { size: 10 });
+      }
+    }
     const burning = st.burnT > 0, bleeding = st.bleedT > 0;
     if (burning) st.burnT -= dt;
     if (bleeding) st.bleedT -= dt;
@@ -1049,7 +1059,9 @@ const Build = {
   repairCost(s) {
     if (!s || !s.broken) return 0;
     if (hasPerk('trapmaster')) return 0;
-    return Math.max(1, Math.ceil(this.def(s.cat, s.id).cost * CFG.repairRate));
+    // Slain monsters/bosses are revived for a share of everything invested in them (upgrades too).
+    const base = s.cat === 'monster' || s.cat === 'boss' ? s.spent : this.def(s.cat, s.id).cost;
+    return Math.max(1, Math.ceil(base * CFG.repairRate));
   },
   totalRepairCost() { return S.structs.filter(s => s.broken).reduce((a, s) => a + this.repairCost(s), 0); },
   sellValue(x, y) {
@@ -1194,6 +1206,7 @@ const Build = {
   _fix(s) {
     s.broken = false; s.cd = 0;
     if (s.maxHp) s.hp = s.maxHp;
+    if (s.ent && typeof Monsters !== 'undefined' && Monsters.revive) Monsters.revive(s.ent);
     FX.burst(s.x + 0.5, s.y + 0.5, { n: 10, colors: ['#9fe8ff', '#ffffff'], speed: 1.5, life: 0.5, size: 2, grav: -2 });
     Path.bump();
   },

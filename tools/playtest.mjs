@@ -192,11 +192,14 @@ for (let run = 0; run < runs; run++) {
       // Upgrades with what's left: best-performing trap types first, then monsters.
       const ups = s.structs.filter(x => Build.upgradable(x)).sort((a, b) => (a.level - b.level) || ((s.stats.trapKills[b.id] || 0) - (s.stats.trapKills[a.id] || 0)));
       for (const x of ups) { const c = Build.upgradeCost(x); if (s.gold - c > 20) Build.upgrade(x.x, x.y); }
-      // Spend what's left on extra guards anywhere beside the back half of the route.
+      // Spend what's left on extra guards anywhere beside the back half of the route…
       for (let i = route.length - 2; i > route.length * 0.3 && s.gold > 30; i--) {
         const p = route[i];
         for (const [dx, dy] of [[0, 1], [0, -1], [1, 0], [-1, 0]]) { const t = Grid.tile(p.x + dx, p.y + dy); if (t && t.type === T.FLOOR && !t.s) { const id = monIds[m++ % monIds.length]; if (afford('monster', id)) place('monster', id, t.x, t.y); } }
       }
+      // …then any remaining upgrades, then traps on every open route tile.
+      for (const x of s.structs.filter(x => Build.upgradable(x))) { const c = Build.upgradeCost(x); if (s.gold - c > 10) Build.upgrade(x.x, x.y); }
+      for (const p of Path.preview()) { const t = Grid.tile(p.x, p.y); if (t.type === T.FLOOR && !t.s && s.gold > 60) { const id = trapIds[k++ % trapIds.length]; if (afford('trap', id)) place('trap', id, p.x, p.y); } }
     }
     function buildPhase() {
       const s = S();

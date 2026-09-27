@@ -10,6 +10,8 @@
  *    Bosses     Minotaur Charge · Lich Raise Dead (+ shadow bolts) · Dragon Fire Breath.
  *    Extras     summon() for Necromancy / Legion / Lich / lairs, alarm() for runes.
  *
+ *  Walkers treat walls, rock, standing barricades and the Heart tile as solid
+ *  (only the Wraith phases through); sight and projectiles pass over barricades.
  *  Module-private runtime state of an entity lives in `m.ai` (see makeAI); other
  *  modules only read the documented entity fields (SPEC §3.3).
  * ========================================================================== */
@@ -24,6 +26,8 @@ const Monsters = (() => {
   const SCAN_T = 0.2;             // target-scan cadence (staggered per monster)
   const LOS_T = 0.15;             // line-of-sight re-check cadence for the current target
   const REPATH_T = 0.35;          // min seconds between A* repaths toward a moving goal
+  const SKIP_T = 3;               // ignore a hero we could not reach for this long (unless the grid changes)
+  const STRAND_T = 1.5;           // how often a monster cut off from home re-checks the way back
   const WANDER_R = 0.8;           // idle wander radius around the post
   const RETURN_SLACK = 1.4;       // idle monsters farther than this from their anchor walk back
   const REGEN = 0.05;             // fraction of max HP regenerated per second at home
@@ -154,7 +158,6 @@ const Monsters = (() => {
   const validHero = h => !!h && !h.dead && !h.removed && !h.escaped && !(h.st && h.st.invisT > 0);
   /** A hero physically present (area effects also hit invisible heroes). */
   const heroHere = h => !!h && !h.dead && !h.removed && !h.escaped;
-  const solidAt = (x, y) => Grid.isSolid(Math.floor(x), Math.floor(y));
   const busy = m => m.state === 'charge' || m.state === 'breath' || m.state === 'cast' || m.state === 'ambush';
   /** Accept either an entity or a Structure (UI may pass the selected struct). */
   const entOf = x => (!x ? null : x.team === 'dm' ? x : x.ent || null);
@@ -164,20 +167,81 @@ const Monsters = (() => {
     return d > Math.PI ? Math.PI * 2 - d : d;
   }
 
-  // The point a monster guards right now: its alarm rune while alarmed, else home.
-  const anchorX = m => (m.ai.alarmT > 0 ? m.ai.ax : m.homeX);
-  const anchorY = m => (m.ai.alarmT > 0 ? m.ai.ay : m.homeY);
+  // The point a monster guards right now: its alarm rune while alarmed; the spot where it was
+  // cut off while its home is unreachable; else home.
+  const anchorX = m => (m.ai.alarmT > 0 ? m.ai.ax : m.ai.stranded ? m.ai.sx : m.homeX);
+  const anchorY = m => (m.ai.alarmT > 0 ? m.ai.ay : m.ai.stranded ? m.ai.sy : m.homeY);
   function leashOf(m) {
     const base = m.post ? m.ai.k.leash : SUMMON_LEASH;
     return m.ai.alarmT > 0 ? Math.max(base, m.ai.alarmR) + 1.5 : base;
   }
   const guardOf = m => (m.post ? m.ai.k.guard : Math.max(SUMMON_GUARD, m.ai.k.guard));
 
-  /** Move to (nx,ny), sliding along walls; false when fully blocked. */
+  /** A tile a walking monster may not enter: walls, rock, the Heart, standing barricades. */
+  function blockedTile(tx, ty) {
+    if (Grid.isSolid(tx, ty)) return true;
+    const t = S.tiles[ty * S.cols + tx];
+    if (t.type === T.HEART) return true;
+    const s = t.s;
+    return !!s && s.cat === 'object' && s.id === 'barricade' && !s.broken;
+  }
+  /** May a walker standing on tile (cx,cy) move to world point (x,y)? (its own tile is always allowed) */
+  function canStep(cx, cy, x, y) {
+    const tx = Math.floor(x), ty = Math.floor(y);
+    return (tx === cx && ty === cy) || !blockedTile(tx, ty);
+  }
+  /** Move to (nx,ny), sliding along obstacles; false when fully blocked. */
   function tryMove(e, nx, ny) {
-    if (!solidAt(nx, ny)) { e.x = nx; e.y = ny; return true; }
-    if (!solidAt(nx, e.y)) { e.x = nx; return true; }
-    if (!solidAt(e.x, ny)) { e.y = ny; return true; }
+    const cx = Math.floor(e.x), cy = Math.floor(e.y);
+    if (canStep(cx, cy, nx, ny)) { e.x = nx; e.y = ny; return true; }
+    if (canStep(cx, cy, nx, e.y)) { e.x = nx; return true; }
+    if (canStep(cx, cy, e.x, ny)) { e.y = ny; return true; }
+    return false;
+  }
+
+  // A* cost for walkers: 1 per open tile, Infinity through obstacles. The goal tile is exempt from
+  // the non-solid blockers so a monster can still path *toward* a foe standing by the Heart.
+  let pathGoal = -1;
+  function walkCost(x, y, i) {
+    const t = S.tiles[i];
+    if (t.type === T.WALL || t.type === T.ROCK) return Infinity;
+    if (i !== pathGoal && blockedTile(x, y)) return Infinity;
+    return 1;
+  }
+  function findPath(sx, sy, gtx, gty) {
+    pathGoal = Grid.inb(gtx, gty) ? gty * S.cols + gtx : -1;
+    const p = Path.astar(sx, sy, gtx, gty, walkCost);
+    pathGoal = -1;
+    return p;
+  }
+
+  /** Does segment A→B pass through the box [x0,x1]×[y0,y1]? (slab test) */
+  function segHitsBox(ax, ay, bx, by, x0, y0, x1, y1) {
+    let t0 = 0, t1 = 1;
+    const dx = bx - ax, dy = by - ay;
+    if (Math.abs(dx) < 1e-9) { if (ax < x0 || ax > x1) return false; }
+    else {
+      let ta = (x0 - ax) / dx, tb = (x1 - ax) / dx;
+      if (ta > tb) { const q = ta; ta = tb; tb = q; }
+      if ((t0 = Math.max(t0, ta)) > (t1 = Math.min(t1, tb))) return false;
+    }
+    if (Math.abs(dy) < 1e-9) return ay >= y0 && ay <= y1;
+    let ta = (y0 - ay) / dy, tb = (y1 - ay) / dy;
+    if (ta > tb) { const q = ta; ta = tb; tb = q; }
+    return Math.max(t0, ta) <= Math.min(t1, tb);
+  }
+  /**
+   * Is a standing barricade (or the Heart) in the way of A→B, widened by `margin`?
+   * Walls are covered by Grid.los; the start and end tiles are ignored.
+   */
+  function blockerBetween(ax, ay, bx, by, margin) {
+    const sx = Math.floor(ax), sy = Math.floor(ay), ex = Math.floor(bx), ey = Math.floor(by);
+    const x0 = Math.floor(Math.min(ax, bx) - margin), x1 = Math.floor(Math.max(ax, bx) + margin);
+    const y0 = Math.floor(Math.min(ay, by) - margin), y1 = Math.floor(Math.max(ay, by) + margin);
+    for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) {
+      if ((x === sx && y === sy) || (x === ex && y === ey) || !Grid.inb(x, y) || Grid.isSolid(x, y) || !blockedTile(x, y)) continue;
+      if (segHitsBox(ax, ay, bx, by, x - margin, y - margin, x + 1 + margin, y + 1 + margin)) return true;
+    }
     return false;
   }
 
@@ -194,13 +258,14 @@ const Monsters = (() => {
     return d - s <= stop + 1e-3;
   }
 
-  /** Can a walker go straight from a to b without clipping walls? (centre line + both shoulders) */
+  /** Can a walker go straight from a to b without clipping walls or barricades? (centre line + both shoulders) */
   function clearWalk(ax, ay, bx, by) {
     if (!Grid.los(ax, ay, bx, by)) return false;
     const dx = bx - ax, dy = by - ay, d = Math.sqrt(dx * dx + dy * dy);
     if (d < 0.05) return true;
     const ox = -dy / d * 0.28, oy = dx / d * 0.28;
-    return Grid.los(ax + ox, ay + oy, bx + ox, by + oy) && Grid.los(ax - ox, ay - oy, bx - ox, by - oy);
+    return Grid.los(ax + ox, ay + oy, bx + ox, by + oy) && Grid.los(ax - ox, ay - oy, bx - ox, by - oy) &&
+      !blockerBetween(ax, ay, bx, by, 0.28);
   }
 
   /**
@@ -225,10 +290,11 @@ const Monsters = (() => {
     const verChanged = ai.pathVer !== S.pathVersion;
     const goalMoved = ai.goalTx !== gtx || ai.goalTy !== gty;
     const exhausted = !!m.path && m.pathIdx >= m.path.length && goalMoved; // walked the old route, goal moved on
-    if ((!m.path && !ai.unreach) || verChanged || exhausted || ((goalMoved || ai.blocked || !m.path) && ai.repathT <= 0)) {
+    const fresh = !m.path && !ai.unreach;                 // no route yet (failed searches retry on the timer)
+    if (fresh || verChanged || exhausted || ((goalMoved || ai.blocked || !m.path) && ai.repathT <= 0)) {
       ai.pathVer = S.pathVersion; ai.goalTx = gtx; ai.goalTy = gty; ai.blocked = false;
       ai.repathT = REPATH_T + Math.random() * 0.25;
-      m.path = Path.astar(m.x, m.y, gtx, gty, Path.baseCost);
+      m.path = findPath(m.x, m.y, gtx, gty);
       m.pathIdx = 0;
       ai.unreach = !m.path;
     }
@@ -237,7 +303,9 @@ const Monsters = (() => {
     const path = m.path;
     while (step > 1e-6 && m.pathIdx < path.length) {
       const wp = path[m.pathIdx];
-      if (Grid.isSolid(wp.x, wp.y)) { ai.blocked = true; m.path = null; return true; }
+      if (wp.x !== ai.goalTx || wp.y !== ai.goalTy ? blockedTile(wp.x, wp.y) : Grid.isSolid(wp.x, wp.y)) {
+        ai.blocked = true; m.path = null; return true; // the route closed (Collapse etc.)
+      }
       const wx = wp.x + 0.5, wy = wp.y + 0.5;
       const ddx = wx - m.x, ddy = wy - m.y, d = Math.sqrt(ddx * ddx + ddy * ddy);
       if (ddx > 0.02) m.face = 1; else if (ddx < -0.02) m.face = -1;
@@ -276,11 +344,11 @@ const Monsters = (() => {
   /** Nearest open tile to (x,y) (the point itself if open) → SPOT. False if none within 3 tiles. */
   function openSpot(x, y) {
     const tx = Math.floor(x), ty = Math.floor(y);
-    if (Grid.inb(tx, ty) && !Grid.isSolid(tx, ty)) { SPOT.x = x; SPOT.y = y; return true; }
+    if (Grid.inb(tx, ty) && !blockedTile(tx, ty)) { SPOT.x = x; SPOT.y = y; return true; }
     let best = Infinity;
     for (let r = 1; r <= 3 && best === Infinity; r++) {
       for (let oy = -r; oy <= r; oy++) for (let ox = -r; ox <= r; ox++) {
-        if (Math.max(Math.abs(ox), Math.abs(oy)) !== r || Grid.isSolid(tx + ox, ty + oy)) continue;
+        if (Math.max(Math.abs(ox), Math.abs(oy)) !== r || blockedTile(tx + ox, ty + oy)) continue;
         const cx = tx + ox + 0.5, cy = ty + oy + 0.5, d = dist(x, y, cx, cy);
         if (d < best) { best = d; SPOT.x = cx; SPOT.y = cy; }
       }
@@ -303,7 +371,9 @@ const Monsters = (() => {
       k: null,                                                   // calcStats() for the current level
       src: { team: 'dm', kind, id: m.type, ent: m, elem: ELEM[m.type] || 'phys' },
       srcFire: { team: 'dm', kind, id: m.type, ent: m, elem: 'fire' },
-      scanT: Math.random() * SCAN_T, losT: 0, seen: false, lostT: 0, ignoreT: 0, alertT: 0,
+      scanT: Math.random() * SCAN_T, losT: 0, seen: false, reach: false, lostT: 0, ignoreT: 0, alertT: 0,
+      skipUid: 0, skipT: 0, skipVer: -1,                         // a hero we could not reach
+      stranded: false, sx: 0, sy: 0, strandT: 0, strandVer: -1,  // cut off from home: guard (sx,sy)
       unreach: false, blocked: false, repathT: 0, pathVer: -1, goalTx: -1, goalTy: -1,
       wanderT: Math.random() * 2, wx: m.x, wy: m.y,
       alarmT: 0, ax: 0, ay: 0, alarmR: 0,
@@ -319,7 +389,8 @@ const Monsters = (() => {
   /** Lock onto a hero ('!' callout the first time; bosses roar). */
   function engage(m, h) {
     const ai = m.ai, fresh = !m.target;
-    m.target = h; ai.lostT = 0; ai.seen = true; ai.losT = LOS_T; ai.unreach = false; m.path = null;
+    m.target = h; ai.lostT = 0; ai.losT = LOS_T; ai.unreach = false; ai.repathT = 0; m.path = null;
+    updateSight(m, h);
     if (!busy(m)) m.state = 'chase';
     if (fresh && ai.alertT <= 0) {
       ai.alertT = 4;
@@ -330,8 +401,17 @@ const Monsters = (() => {
 
   /** Stop chasing and head back (after a snapped leash, ignore heroes for a moment). */
   function giveUp(m, leashed) {
-    m.target = null; m.path = null; m.ai.lostT = 0; m.state = 'return';
-    if (leashed) m.ai.ignoreT = 1.5;
+    const ai = m.ai;
+    if (ai.unreach && m.target) { ai.skipUid = m.target.uid; ai.skipT = SKIP_T; ai.skipVer = S.pathVersion; }
+    m.target = null; m.path = null; ai.lostT = 0; ai.unreach = false; ai.repathT = 0; m.state = 'return';
+    if (leashed) ai.ignoreT = 1.5;
+  }
+
+  /** Refresh sight (walls block) and melee reach (barricades & the Heart block too; wraiths ignore them). */
+  function updateSight(m, t) {
+    const ai = m.ai;
+    ai.seen = Grid.los(m.x, m.y, t.x, t.y);
+    ai.reach = ai.seen && (m.phasing || dist(m.x, m.y, t.x, t.y) > 2 || !blockerBetween(m.x, m.y, t.x, t.y, 0));
   }
 
   /**
@@ -345,13 +425,14 @@ const Monsters = (() => {
     const ax = anchorX(m), ay = anchorY(m), L = leashOf(m) - 0.3;
     if ((m.x - ax) * (m.x - ax) + (m.y - ay) * (m.y - ay) > L * L) return; // too far out to start a fight
     const g = guardOf(m);
-    let cx = m.homeX, cy = m.homeY, r = g;
+    let cx = ai.stranded ? ai.sx : m.homeX, cy = ai.stranded ? ai.sy : m.homeY, r = g;
     if (provoked) { cx = m.x; cy = m.y; r = Math.max(g + 2, 6); }
     else if (ai.alarmT > 0) { cx = m.x; cy = m.y; r = g + 1; }
     const r2 = r * r, needLos = !m.phasing && !!m.post;
     let best = null, bd = Infinity;
+    const skip = ai.skipT > 0 && ai.skipVer === S.pathVersion ? ai.skipUid : 0;
     for (const h of S.heroes) {
-      if (!validHero(h)) continue;
+      if (!validHero(h) || h.uid === skip) continue;
       const hx = h.x - cx, hy = h.y - cy;
       if (hx * hx + hy * hy > r2) continue;
       const mx = h.x - m.x, my = h.y - m.y, d2 = mx * mx + my * my;
@@ -372,10 +453,10 @@ const Monsters = (() => {
   function keepTarget(m, dt) {
     const t = m.target, ai = m.ai;
     if (!t) return;
-    if (!validHero(t)) { m.target = null; ai.lostT = 0; ai.scanT = 0; return; }
+    if (!validHero(t)) { m.target = null; ai.lostT = 0; ai.scanT = 0; ai.unreach = false; ai.repathT = 0; return; }
     const ax = anchorX(m), ay = anchorY(m), L = leashOf(m);
     if ((m.x - ax) * (m.x - ax) + (m.y - ay) * (m.y - ay) > L * L) { giveUp(m, true); return; }
-    if ((ai.losT -= dt) <= 0) { ai.losT = LOS_T; ai.seen = Grid.los(m.x, m.y, t.x, t.y); }
+    if ((ai.losT -= dt) <= 0) { ai.losT = LOS_T; updateSight(m, t); }
     // Placed walkers lose foes they cannot see; anyone loses foes they cannot reach
     // (ranged ones only if they cannot shoot them either).
     const shootable = ai.k.ranged && ai.seen && dist(m.x, m.y, t.x, t.y) <= m.range;
@@ -500,18 +581,18 @@ const Monsters = (() => {
     if (m.type === 'spider') trySpiderWeb(m);
     const dx = t.x - m.x, dy = t.y - m.y, d = Math.sqrt(dx * dx + dy * dy);
     const stand = m.isBoss ? STAND_BOSS : STAND_MELEE;
-    const onOpen = !m.phasing || !solidAt(m.x, m.y); // wraiths never fight from inside a wall
+    const onOpen = !m.phasing || !blockedTile(Math.floor(m.x), Math.floor(m.y)); // wraiths never fight from inside a wall
     // Dragon: with the breath about to be ready, rear up at range so the cone catches the whole group.
     ai.hold = m.type === 'dragon' && m.abilityT > 0 && m.abilityT <= BREATH.holdT && ai.seen &&
       d > m.range && d <= ai.k.breathLen;
     if (ai.hold) { m.state = 'chase'; m.face = dx >= 0 ? 1 : -1; return; }
-    if (d <= m.range && ai.seen && onOpen) {
+    if (d <= m.range && ai.reach && onOpen) {
       m.state = 'attack';
       if (d > stand) steer(m, t.x, t.y, moveSpeed(m) * dt, stand, false); // no phasing while striking
       if (m.atkT <= 0) melee(m, t);
     } else {
       m.state = 'chase';
-      approach(m, t.x, t.y, dt, ai.seen && onOpen ? stand : (m.phasing ? 0.3 : 0));
+      approach(m, t.x, t.y, dt, ai.reach && onOpen ? stand : (m.phasing ? 0.3 : 0));
     }
   }
 
@@ -550,8 +631,8 @@ const Monsters = (() => {
       let bestS = dist(m.x, m.y, t.x, t.y) + 0.15, bx = NaN, by = NaN;
       for (let i = 0; i < 8; i++) {
         const ox = DIRS8[i][0], oy = DIRS8[i][1], nx = tx + ox, ny = ty + oy;
-        if (Grid.isSolid(nx, ny) || Grid.barricadeAt(nx, ny)) continue;
-        if (ox && oy && (Grid.isSolid(tx + ox, ty) || Grid.isSolid(tx, ty + oy))) continue; // no corner cutting
+        if (blockedTile(nx, ny)) continue;
+        if (ox && oy && (blockedTile(tx + ox, ty) || blockedTile(tx, ty + oy))) continue; // no corner cutting
         const cx = nx + 0.5, cy = ny + 0.5;
         if (dist(cx, cy, ax, ay) > L) continue;
         let s = Math.min(dist(cx, cy, t.x, t.y), lo + 1);
@@ -579,24 +660,47 @@ const Monsters = (() => {
     const r = randRange(0.15, WANDER_R) * (m.isBoss ? 0.6 : 1), a = Math.random() * Math.PI * 2;
     const px = ax + Math.cos(a) * r, py = ay + Math.sin(a) * r;
     const tx = Math.floor(px), ty = Math.floor(py);
-    if (!Grid.isSolid(tx, ty) && !Grid.barricadeAt(tx, ty) && clearWalk(ax, ay, px, py)) { ai.wx = px; ai.wy = py; }
+    if (!blockedTile(tx, ty) && clearWalk(ax, ay, px, py)) { ai.wx = px; ai.wy = py; }
     else { ai.wx = ax; ai.wy = ay; }
+  }
+
+  /** Home is out of reach (walled/barricaded off): guard the current spot instead of pacing. */
+  function strand(m) {
+    const ai = m.ai;
+    ai.stranded = true; ai.sx = m.x; ai.sy = m.y; ai.strandT = STRAND_T; ai.strandVer = S.pathVersion;
+    m.state = 'idle'; m.path = null; ai.unreach = false;
+  }
+  /** Periodically (and whenever the grid changes) check whether the way home has reopened. */
+  function recheckHome(m, dt) {
+    const ai = m.ai;
+    if ((ai.strandT -= dt) > 0 && ai.strandVer === S.pathVersion) return;
+    ai.strandT = STRAND_T; ai.strandVer = S.pathVersion;
+    if (findPath(m.x, m.y, Math.floor(m.homeX), Math.floor(m.homeY))) {
+      ai.stranded = false; m.state = 'return'; m.path = null; ai.repathT = 0;
+    }
   }
 
   /** No foe: rush to an alarm, walk back to the anchor, or idle there (wander + regen at home). */
   function idleBehaviour(m, dt) {
-    const ai = m.ai, ax = anchorX(m), ay = anchorY(m), alarmed = ai.alarmT > 0;
+    const ai = m.ai;
+    if (ai.stranded && !m.phasing) recheckHome(m, dt);
+    const ax = anchorX(m), ay = anchorY(m), alarmed = ai.alarmT > 0;
     const d = dist(m.x, m.y, ax, ay);
-    if (alarmed && d > 0.9) { m.state = 'chase'; approach(m, ax, ay, dt, 0.6); return; }
+    if (alarmed && d > 0.9) {
+      m.state = 'chase';
+      if (!approach(m, ax, ay, dt, 0.6) && ai.goalTx === Math.floor(ax) && ai.goalTy === Math.floor(ay)) ai.alarmT = 0; // rune out of reach: stay on guard (still enraged)
+      return;
+    }
     if (m.state === 'chase' || m.state === 'attack') m.state = 'return';
-    const inWall = m.phasing && solidAt(m.x, m.y);
+    const inWall = m.phasing && blockedTile(Math.floor(m.x), Math.floor(m.y));
     if (inWall || d > RETURN_SLACK || (m.state === 'return' && d > (alarmed ? 0.6 : 0.12))) {
       m.state = 'return';
-      approach(m, ax, ay, dt, 0.05);
+      // Only a failed search for this very anchor means we are cut off (not a stale failure).
+      if (!approach(m, ax, ay, dt, 0.05) && ai.goalTx === Math.floor(ax) && ai.goalTy === Math.floor(ay)) strand(m);
       return;
     }
     if (m.state !== 'idle') { m.state = 'idle'; ai.wx = ax; ai.wy = ay; ai.wanderT = randRange(0.8, 2); }
-    if (!alarmed && d <= WANDER_R + 0.1) regen(m, dt);
+    if (!alarmed && !ai.stranded && d <= WANDER_R + 0.1) regen(m, dt);
     if (m.type === 'mimic') { steer(m, ax, ay, moveSpeed(m) * dt, 0.01, false); return; } // mimics sit still
     if ((ai.wanderT -= dt) <= 0) pickWander(m, ax, ay);
     steer(m, ai.wx, ai.wy, moveSpeed(m) * 0.35 * dt, 0.02, m.phasing);
@@ -626,7 +730,8 @@ const Monsters = (() => {
     for (const h of S.heroes) {
       if (!validHero(h)) continue;
       const dx = h.x - m.x, dy = h.y - m.y, d2 = dx * dx + dy * dy;
-      if (d2 <= bd) { bd = d2; victim = h; }
+      if (d2 > bd || !Grid.los(m.x, m.y, h.x, h.y) || blockerBetween(m.x, m.y, h.x, h.y, 0)) continue;
+      bd = d2; victim = h;
     }
     if (victim) ambush(m, victim);
     else if (provoked) { m.disguised = false; FX.text(m.x, m.y - 0.8, '!', '#ff5a5a', { size: 12 }); }
@@ -637,7 +742,7 @@ const Monsters = (() => {
     const ai = m.ai;
     m.disguised = false; m.state = 'ambush'; m.target = h; m.face = h.x >= m.x ? 1 : -1;
     m.animT = MIMIC.stagger; m.atkT = m.atkCd;
-    ai.abT = MIMIC.stagger; ai.calmT = 0; ai.lostT = 0; ai.seen = true; ai.losT = LOS_T; ai.alertT = 4;
+    ai.abT = MIMIC.stagger; ai.calmT = 0; ai.lostT = 0; ai.seen = ai.reach = true; ai.losT = LOS_T; ai.alertT = 4;
     Combat.damage(h, hitDamage(m, ai.k.ambushDmg), ai.src);
     Status.apply(h, 'root', { dur: MIMIC.root });
     FX.burst(m.x, m.y, { n: 16, colors: PAL.wood, speed: 3, life: 0.6, size: 2.6, grav: 6 });
@@ -964,8 +1069,8 @@ const Monsters = (() => {
    * ------------------------------------------------------------------------ */
   const canNudge = m => !m.dead && !m.removed && !m.disguised && m.state !== 'charge' && m.state !== 'breath' && m.state !== 'cast';
   function nudge(m, ox, oy) {
-    const nx = m.x + ox, ny = m.y + oy;
-    if (!solidAt(nx, ny)) { m.x = nx; m.y = ny; } else if (!solidAt(nx, m.y)) m.x = nx; else if (!solidAt(m.x, ny)) m.y = ny;
+    const cx = Math.floor(m.x), cy = Math.floor(m.y), nx = m.x + ox, ny = m.y + oy;
+    if (canStep(cx, cy, nx, ny)) { m.x = nx; m.y = ny; } else if (canStep(cx, cy, nx, m.y)) m.x = nx; else if (canStep(cx, cy, m.x, ny)) m.y = ny;
   }
   function separate(dt) {
     const arr = S.monsters, n = arr.length;
@@ -1000,6 +1105,7 @@ const Monsters = (() => {
     if (m.isBoss && m.abilityT > 0) m.abilityT -= dt;
     if (ai.webT > 0) ai.webT -= dt;
     if (ai.ignoreT > 0) ai.ignoreT -= dt;
+    if (ai.skipT > 0) ai.skipT -= dt;
     if (ai.alertT > 0) ai.alertT -= dt;
     if (ai.repathT > 0) ai.repathT -= dt;
     if (ai.alarmT > 0) ai.alarmT = Math.max(0, ai.alarmT - dt);
@@ -1234,7 +1340,7 @@ const Monsters = (() => {
         FX.text(m.x, m.y - 0.9, 'Enraged!', '#ff6a4a', { size: 10 });
         if (m.disguised) continue; // mimics stay in ambush (but enraged)
         const ai = m.ai;
-        ai.alarmT = dur; ai.ax = x; ai.ay = y; ai.alarmR = radius; ai.ignoreT = 0;
+        ai.alarmT = dur; ai.ax = x; ai.ay = y; ai.alarmR = radius; ai.ignoreT = 0; ai.unreach = false; ai.repathT = 0;
         if (!m.target && !busy(m)) { m.state = 'chase'; m.path = null; }
       }
       return n;
@@ -1265,6 +1371,7 @@ const Monsters = (() => {
         case 'respawn': return 'Reassembling';
         default:
           if (ai.alarmT > 0) return 'Holding the alarm point' + enr;
+          if (ai.stranded) return 'Cut off from its post' + enr;
           return (m.post ? 'Guarding' : 'Prowling') + enr;
       }
     },

@@ -22,23 +22,9 @@ const UI = (() => {
   const REWARD_GUARD_MS = 320;    // ignore perk picks right after the modal opens (no click-through)
   const FAIL_TOAST_GAP = 1400;    // ms before the same placement-failure reason may toast again
   const LOW_HEART = 0.3;          // Heart bar turns red & pulses at/below this fraction
+  const MODAL_GUARD_MS = 600;     // title / game-over buttons ignore clicks this long after opening
   const SPEEDS = [1, 2, 4];
   const POWER_IDS = Object.keys(POWERS);
-
-  /** Emoji used when Sprites.iconURL() returns nothing for an item. */
-  const GLYPH = {
-    'wall:wall': '🧱',
-    'trap:spike': '🔺', 'trap:arrow': '🏹', 'trap:pit': '🕳️', 'trap:slime': '🟢', 'trap:fire': '🔥',
-    'trap:alarm': '🔔', 'trap:boulder': '🪨', 'trap:teleport': '🌀',
-    'monster:skeleton': '💀', 'monster:goblin': '👺', 'monster:orc': '👹', 'monster:spider': '🕷️',
-    'monster:imp': '😈', 'monster:wraith': '👻', 'monster:mimic': '🎁',
-    'boss:minotaur': '🐂', 'boss:lich': '☠️', 'boss:dragon': '🐉',
-    'object:chest': '💰', 'object:torch': '🕯️', 'object:barricade': '🚧', 'object:well': '⛲', 'object:lair': '🦴',
-    'hero:warrior': '⚔️', 'hero:rogue': '🗡️', 'hero:ranger': '🏹', 'hero:mage': '🧙', 'hero:cleric': '✨',
-    'hero:paladin': '🛡️', 'hero:miner': '⛏️',
-    'heroBoss:champion': '👑', 'heroBoss:archmage': '🔮', 'heroBoss:saint': '😇', 'heroBoss:shadow': '🥷',
-    'tile:rock': '🪨', 'tile:entrance': '🚪', 'tile:heart': '❤️', 'tile:floor': '⬛',
-  };
 
   /** Stats shown as chips on each build card (in order; missing keys are skipped). */
   const CARD_KEYS = {
@@ -57,7 +43,6 @@ const UI = (() => {
   const STAT_SKIP = new Set(['cost', 'unlock', 'name', 'desc', 'place', 'hidden', 'oneUse', 'lure', 'undead', 'phasing', 'ranged', 'ability', 'abilityName', 'level', 'lvl', 'id', 'type']);
   /** describe() lines that merely repeat an HP bar we already draw. */
   const HP_LINE = /^\s*(hp|health)\s*[:\s]\s*\d/i;
-  const MON_SCALED = new Set(['hp', 'dmg', 'ambushDmg', 'chargeDmg', 'breathDmg']);
 
   /* ---------------------------------------------------------------------------
    * 2. SMALL HELPERS
@@ -73,9 +58,10 @@ const UI = (() => {
   const secs = v => num(v, 2) + 's';
   const tiles = v => num(v, 1) + (v === 1 ? ' tile' : ' tiles');
   const pct = v => Math.round(v * 100) + '%';
+  /** '1 wave' / '3 waves' (formatted count + correctly pluralised noun). */
+  const plural = (n, word, many = word + 's') => fmtInt(n) + ' ' + (n === 1 ? word : many);
   const humanize = k => String(k).replace(/([a-z])([A-Z])/g, '$1 $2').replace(/^./, c => c.toUpperCase()).replace(/ ([A-Z])/g, (m, c) => ' ' + c.toLowerCase());
   const rarColor = r => (RARITY[r] ? RARITY[r].color : '#b9b9b9');
-  const has = (obj, fn) => typeof obj !== 'undefined' && obj && typeof obj[fn] === 'function';
 
   /** Stat key → [label, long formatter, short chip formatter]. */
   const STAT = {
@@ -113,16 +99,6 @@ const UI = (() => {
     const fmt = d ? d[1] : (v => num(v));
     const short = d && d[2] ? d[2] : (v => fmt(v) + ' ' + label.toLowerCase());
     return { label, fmt, short };
-  }
-
-  /** Run fn, returning `fallback` on error (other modules may be mid-development). Warns once per site. */
-  const warned = new Set();
-  function safe(fn, fallback, site) {
-    try { return fn(); } catch (e) {
-      const key = site || String(e && e.message);
-      if (!warned.has(key)) { warned.add(key); console.warn('[UI] ' + key + ':', e); }
-      return fallback;
-    }
   }
 
   /** Diffed DOM writes — only touch a node when the value changed. */
@@ -210,27 +186,13 @@ const UI = (() => {
   }
 
   /* ---------------------------------------------------------------------------
-   * 4. SPRITE ICONS (from Render's Sprites, with emoji fallback)
+   * 4. SPRITE ICONS (from Render's Sprites)
    * ------------------------------------------------------------------------ */
-  const iconCache = new Map();
-  /** Cached Sprites.iconURL(kind, id); '' when unavailable. Empty results are not cached. */
-  function iconURL(kind, id) {
-    const key = kind + ':' + id;
-    const hit = iconCache.get(key);
-    if (hit) return hit;
-    let url = '';
-    if (typeof Sprites !== 'undefined' && Sprites && typeof Sprites.iconURL === 'function') {
-      url = safe(() => Sprites.iconURL(kind, id), '', 'Sprites.iconURL') || '';
-    }
-    if (typeof url !== 'string') url = '';
-    if (url) iconCache.set(key, url);
-    return url;
-  }
-  /** <img> for a sprite icon, or a glyph span when there is no image. */
+  /** <img> for a Sprites icon (Sprites caches the data URLs; an empty box if a sprite ever fails to paint). */
   function iconHTML(kind, id, cls = '') {
-    const url = iconURL(kind, id);
-    if (url) return `<img class="ico${cls ? ' ' + cls : ''}" src="${url}" alt="" draggable="false">`;
-    return `<span class="ico glyph${cls ? ' ' + cls : ''}">${GLYPH[kind + ':' + id] || '❔'}</span>`;
+    const url = Sprites.iconURL(kind, id);
+    const c = 'ico' + (cls ? ' ' + cls : '');
+    return url ? `<img class="${c}" src="${url}" alt="" draggable="false">` : `<span class="${c}"></span>`;
   }
   const structIcon = (cat, id, cls) => iconHTML(cat === 'wall' ? 'wall' : cat, id, cls);
 
@@ -250,8 +212,8 @@ const UI = (() => {
     toasts: [],
     reward: { ids: [], t: 0 },
     helpPaused: false,      // help overlay paused the wave (resume on close)
-    bossKillsAtStart: 0,
-    cdMax: {},              // observed full cooldown per power (handles perk-scaled cooldowns)
+    overT: 0, titleT: 0,    // when the game-over / title modals opened (accidental-click guard)
+    wallKey: -1, walls: 0,  // cached count of player walls (per S.pathVersion)
     powerRefs: {},
     resizeQueued: false,
     previewFor: undefined,  // the S.nextWave object the preview was built from
@@ -273,7 +235,7 @@ const UI = (() => {
     msg = String(msg == null ? '' : msg);
     if (!msg) return;
     if (!TOAST_ICON[kind]) kind = 'info';
-    if (!U.ready) { console.log('[toast] ' + msg); return; }
+    if (!U.ready) return;
     const dup = U.toasts.find(t => !t.leaving && t.msg === msg && t.kind === kind);
     if (dup) {
       dup.count++;
@@ -440,8 +402,8 @@ const UI = (() => {
     // While placing, only surface non-obvious rejection reasons.
     if (S.phase === 'build' && S.ui.tool) {
       const t = S.ui.tool;
-      const c = safe(() => Build.canPlace(t.cat, t.id, hv.tx, hv.ty), { ok: true }, 'Build.canPlace');
-      if (c && !c.ok && c.reason && !/occupied|open floor/i.test(c.reason)) {
+      const c = Build.canPlace(t.cat, t.id, hv.tx, hv.ty);
+      if (!c.ok && c.reason && !/occupied|open floor/i.test(c.reason)) {
         return `<div class="${c.blocks ? 'tt-bad' : 'tt-warn'}">${px(c.blocks ? 'bad' : 'warn')} ${esc(c.reason)}</div>`;
       }
       return '';
@@ -467,8 +429,7 @@ const UI = (() => {
     if (p.target === 'hero') {
       const h = Spatial.nearestHero(hv.wx, hv.wy, 0.9);
       if (!h) return `<div class="tt-desc">${p.icon} Click a hero to terrify them.</div>`;
-      const immune = HERO_CLASSES[h.type].fearImmune || h.boss;
-      return immune ? `<div class="tt-warn">${px('warn')} ${esc(heroName(h))} is immune to fear.</div>` : `<div class="tt-good">${p.icon} Terrify ${esc(heroName(h))}</div>`;
+      return Status.fearImmune(h) ? `<div class="tt-warn">${px('warn')} ${esc(heroName(h))} is immune to fear.</div>` : `<div class="tt-good">${p.icon} Terrify ${esc(heroName(h))}</div>`;
     }
     if (id === 'lightning') {
       const n = Spatial.heroesInRadius(hv.wx, hv.wy, p.radius).length;
@@ -488,7 +449,7 @@ const UI = (() => {
     if (b) tags.push(`<span class="badge badge-boss">${px('crown')}Boss</span>`);
     if (h.elite) tags.push(`<span class="badge badge-rep">${px('star')}Elite</span>`);
     const sub = b ? esc(b.title) + ' · ' + esc(c.name) : esc(c.name) + ' · ' + esc(c.role);
-    const state = has(typeof Heroes !== 'undefined' ? Heroes : null, 'stateLabel') ? safe(() => Heroes.stateLabel(h), h.state, 'Heroes.stateLabel') : h.state;
+    const state = Heroes.stateLabel(h);
     const r = [['State', esc(state || '—')]];
     if (h.loot > 0) r.push(['Carrying', `<span class="goldc">${px('sack')} ${fmtInt(h.loot)} gold</span>`]);
     if (h.channel && h.channel.max > 0) r.push(['Channeling', `${esc(humanize(h.channel.kind))} ${pct(clamp(h.channel.t / h.channel.max, 0, 1))}`]);
@@ -506,13 +467,12 @@ const UI = (() => {
     if (m.isBoss || cat === 'boss') tags.push('Dungeon boss');
     if (m.temp) tags.push(m.risen ? 'Risen for this wave' : m.lair ? 'Lair spawn' : 'Summoned');
     else if (m.risen) tags.push('Risen');
-    const state = has(typeof Monsters !== 'undefined' ? Monsters : null, 'stateLabel') ? safe(() => Monsters.stateLabel(m), m.state, 'Monsters.stateLabel') : m.state;
+    const state = Monsters.stateLabel(m);
     const r = [['State', esc(state || '—')]];
     if (m.disguised) r.push(['Disguise', 'Looks like a treasure chest']);
     if (m.abilityName) r.push([esc(m.abilityName), m.abilityT > 0 ? 'in ' + secs(Math.max(0.1, m.abilityT)) : '<span class="good">ready</span>']);
     if (m.respawnT > 0) r.push(['Reassembles', 'in ' + secs(m.respawnT)]);
-    const lines = has(typeof Monsters !== 'undefined' ? Monsters : null, 'describe') ? safe(() => Monsters.describe(m), [], 'Monsters.describe') : [];
-    const extra = Array.isArray(lines) ? lines.map(String).filter(l => !HP_LINE.test(l)) : [];
+    const extra = Monsters.describe(m).filter(l => !HP_LINE.test(l));
     const lineHTML = extra.length ? `<ul class="tt-lines">${extra.slice(0, 6).map(l => `<li>${esc(l)}</li>`).join('')}</ul>` : '';
     const sub = `${pipsHTML(lvl)} Level ${lvl}${tags.length ? ' · ' + tags.join(' · ') : ''}`;
     return tipHead(structIcon(cat, m.type), esc(d.name), sub) + hpBar(m.hp, m.maxHp, 'fill-mon') + rows(r) + statusChips(m) + lineHTML;
@@ -563,7 +523,7 @@ const UI = (() => {
   function terrainTip(t) {
     switch (t.type) {
       case T.WALL:
-        if (t.rubble) return simpleTip(iconHTML('wall', 'wall'), 'Rubble', 'Collapsed tunnel', 'Blocks the way like a wall. Right-click during the build phase to clear it (no refund).');
+        if (t.rubble) return simpleTip(iconHTML('tile', 'rubble'), 'Rubble', 'Collapsed tunnel', 'Blocks the way like a wall. Right-click during the build phase to clear it (no refund).');
         return tipHead(iconHTML('wall', 'wall'), 'Stone Wall', 'Player-built') +
           `<div class="tt-desc">Blocks heroes and their line of sight. Arrow Walls can be mounted on it.</div>` +
           (S.phase === 'build' ? `<div class="tt-foot">Sell for <b class="goldc">${fmtInt(Build.sellValue(t.x, t.y))}g</b> · right-click to sell</div>` : '');
@@ -573,12 +533,15 @@ const UI = (() => {
         return simpleTip(iconHTML('tile', 'entrance'), 'Entrance', 'Where heroes arrive', 'Adventurers enter here. Fleeing heroes — and thieves carrying your treasure — escape through it.');
       case T.HEART: return heartTip();
       default: {
+        const lit = Light.isLit(t.x, t.y);
+        let html = tipHead(iconHTML('tile', 'floor', 'mini'), 'Open floor', lit ? 'Torchlit' : 'Open ground');
+        html += lit ? '<div class="tt-desc">Heroes standing here are <b class="warn">Exposed</b> (+' + pct(CFG.torchExposed) + ' damage taken) — but hidden traps in the light are visible to them.</div>'
+          : `<div class="tt-desc">${S.phase === 'build' ? 'Build walls, traps, monsters or objects here.' : 'Heroes can walk here.'}</div>`;
         const dng = Danger.get(t.x, t.y);
         if (dng >= 1 || (S.ui.showDanger && dng > 0.05)) {
-          return tipHead(px('eye'), 'Danger memory', 'Heroes remember this spot') + hpBar(dng, CFG.dangerCap, 'fill-mon', false) +
-            `<div class="tt-desc">Heroes died or found traps near here (${num(dng, 1)}). Smarter heroes route around remembered danger; it fades between waves.</div>`;
+          html += `<div class="tt-foot">${px('eye')} <b>Danger memory ${num(dng, 1)}</b> — heroes died or found traps near here; smarter heroes route around it. It fades between waves.</div>`;
         }
-        return '';
+        return html;
       }
     }
   }
@@ -591,7 +554,7 @@ const UI = (() => {
   function heartTip() {
     const r = [['Pulse', heartPulseText()], ['Regenerates', `+${CFG.heartRegenPerWave} HP after each wave`]];
     if (hasPerk('undying_heart')) r.push(['Undying', S.undyingUsed ? '<span class="bad">spent this wave</span>' : '<span class="good">ready</span>']);
-    return tipHead(px('gem'), 'The Dungeon Heart', 'Protect it at all costs') + hpBar(S.heartHp, S.heartMax, 'fill-heart') + rows(r) +
+    return tipHead(iconHTML('tile', 'heart'), 'The Dungeon Heart', 'Protect it at all costs') + hpBar(S.heartHp, S.heartMax, 'fill-heart') + rows(r) +
       '<div class="tt-foot">If it shatters, the run is over.</div>';
   }
 
@@ -666,14 +629,8 @@ const UI = (() => {
     const c = HERO_CLASSES[cls];
     if (!c) return '';
     const b = boss ? HERO_BOSSES[boss] : null;
-    const sc = typeof heroWaveScale === 'function' ? heroWaveScale(wave)
-      : { hp: 1 + CFG.heroHpPerWave * (wave - 1), dmg: 1 + CFG.heroDmgPerWave * (wave - 1) };
-    let hp = c.hp * sc.hp, dmg = c.dmg * sc.dmg, spd = c.speed;
-    let bounty = c.gold * (1 + CFG.bountyPerWave * (wave - 1));
-    if (elite) { hp *= CFG.eliteHpMul; dmg *= CFG.eliteDmgMul; spd *= CFG.eliteSpeedMul; bounty *= CFG.eliteBountyMul; }
-    if (b) { hp *= b.hpMul; dmg *= b.dmgMul; spd *= b.speedMul; bounty *= CFG.heroBossBountyMul; }
-    if (hasPerk('midas')) hp *= 1.2;
-    if (hasPerk('blood_money')) bounty *= 2;
+    const m = heroStatMuls({ elite, boss }, wave); // the same multipliers Heroes.create and the bounty use
+    const hp = c.hp * m.hp, dmg = c.dmg * m.dmg, spd = c.speed * m.spd, bounty = c.gold * m.bounty;
     const icon = b ? iconHTML('heroBoss', boss) : iconHTML('hero', cls);
     const tags = [];
     if (b) tags.push(`<span class="badge badge-boss">${px('crown')}Boss</span>`);
@@ -713,16 +670,19 @@ const UI = (() => {
         `Spend it on walls, traps, monsters and objects. Earned from slain heroes, recovered loot and wave income (+${Econ.waveIncome()} after this wave). Thieves who escape steal from it.`);
       case 'mana': {
         const wells = S.structs.filter(s => s.cat === 'object' && s.id === 'well' && !s.broken).length;
-        const regen = CFG.manaRegen * (hasPerk('mana_spring') ? 1.4 : 1) + wells * OBJECTS.well.regen;
-        return tipHead(px('mana'), `Mana ${Math.floor(S.mana)} / ${S.manaMax}`, 'Fuels Dungeon Master powers') +
-          `<div class="tt-desc">Regenerates during waves and resets to ${CFG.manaStart} when a wave begins.</div>` +
-          rows([['Regeneration', `+${num(regen, 2)}/s`], ['Mana Wells', String(wells)]]);
+        const waving = S.phase === 'wave';
+        return tipHead(px('mana'), waving ? `Mana ${Math.floor(S.mana)} / ${S.manaMax}` : `Mana at wave start: ${manaAtStart()} / ${S.manaMax}`, 'Fuels Dungeon Master powers') +
+          `<div class="tt-desc">Every wave begins with ${manaAtStart()} mana, which regenerates while the wave runs.</div>` +
+          rows([['Regeneration', `+${num(Powers.manaRegen(), 2)}/s during waves`], ['Mana Wells', String(wells)]]);
       }
       case 'heart': return heartTip();
       case 'best': {
-        const d = Save.data;
-        return simpleTip(px('trophy'), 'Best run', d.runs ? `${d.runs} run${d.runs === 1 ? '' : 's'} played` : 'No runs yet',
-          d.bestWave ? `Survived ${d.bestWave} wave${d.bestWave === 1 ? '' : 's'} with ${fmtInt(d.bestKills || 0)} heroes slain.` : 'Survive a wave to set a record.');
+        const d = Save.data, now = runWaves();
+        const sub = d.runs ? plural(d.runs, 'run') + ' played' : 'No finished runs yet';
+        let t = d.bestWave ? `Record: ${plural(d.bestWave, 'wave')} survived with ${plural(d.bestKills || 0, 'hero', 'heroes')} slain.` : 'Survive a wave to set a record.';
+        if (now > (d.bestWave || 0)) t = `This run is the new record: ${plural(now, 'wave')} survived so far` + (d.bestWave ? ` (previous best ${fmtInt(d.bestWave)}).` : '.');
+        else if (now > 0) t += ` This run: ${plural(now, 'wave')}.`;
+        return simpleTip(px('trophy'), 'Best run', sub, t);
       }
       case 'speed1': case 'speed2': case 'speed4':
         return simpleTip('', 'Game speed ' + k.slice(5) + '×', 'Keys 1 · 2 · 3 during waves', 'Simulation speed for waves. Building is never timed.');
@@ -747,57 +707,35 @@ const UI = (() => {
   }
 
   /* ---------------------------------------------------------------------------
-   * 8. STATS — module-provided numbers with a data-table fallback
+   * 8. STATS & DESCRIPTIONS — always from the owning module (perks applied)
    * ------------------------------------------------------------------------ */
-  /** Raw per-level numbers straight from the content tables (no perks). */
-  function tableStats(cat, id, level) {
-    const d = contentDef(cat, id);
-    const out = {};
-    if (!d) return out;
-    const L = clamp(level | 0, 1, 3);
-    if (cat === 'trap') {
-      for (const k of Object.keys(d)) {
-        if (STAT_SKIP.has(k)) continue;
-        const v = d[k];
-        if (Array.isArray(v) && typeof v[0] === 'number') out[k] = v[Math.min(v.length, L) - 1];
-        else if (typeof v === 'number') out[k] = v;
-      }
-    } else if (cat === 'monster' || cat === 'boss') {
-      const mul = CFG.levelStatMul[L] || 1;
-      for (const k of Object.keys(d)) {
-        if (STAT_SKIP.has(k) || typeof d[k] !== 'number') continue;
-        out[k] = MON_SCALED.has(k) ? Math.round(d[k] * mul) : d[k];
-      }
-    }
-    return out;
-  }
-  /** Effective stats (with perks) from Traps.stats / Monsters.stats; table fallback when unavailable. */
+  /** Effective numbers for an item at a level: Traps.stats / Monsters.stats ({} for walls & objects). */
   function itemStats(cat, id, level) {
-    let r = null;
-    if (cat === 'trap' && has(typeof Traps !== 'undefined' ? Traps : null, 'stats')) r = safe(() => Traps.stats(id, level), null, 'Traps.stats');
-    else if ((cat === 'monster' || cat === 'boss') && has(typeof Monsters !== 'undefined' ? Monsters : null, 'stats')) r = safe(() => Monsters.stats(id, level), null, 'Monsters.stats');
-    if (r && typeof r === 'object' && Object.keys(r).some(k => typeof r[k] === 'number')) return r;
-    return tableStats(cat, id, level);
+    if (cat === 'trap') return Traps.stats(id, level);
+    if (cat === 'monster' || cat === 'boss') return Monsters.stats(id, level);
+    return {};
   }
-  /** Human-readable lines for a structure: the owning module's describe(), else stats. */
+  /** Human-readable lines for a structure from its module's describe(). */
   function describeStruct(s) {
-    let lines = null;
-    if (s.cat === 'trap' && has(typeof Traps !== 'undefined' ? Traps : null, 'describe')) lines = safe(() => Traps.describe(s), null, 'Traps.describe');
-    else if (s.cat === 'object' && has(typeof Objects !== 'undefined' ? Objects : null, 'describe')) lines = safe(() => Objects.describe(s), null, 'Objects.describe');
-    else if ((s.cat === 'monster' || s.cat === 'boss') && s.ent && has(typeof Monsters !== 'undefined' ? Monsters : null, 'describe')) lines = safe(() => Monsters.describe(s.ent), null, 'Monsters.describe');
-    if (Array.isArray(lines) && lines.length) return lines.map(String);
-    // Fallback: plain stat lines.
-    const st = itemStats(s.cat, s.id, s.level);
-    const out = Object.keys(st).filter(k => typeof st[k] === 'number' && !STAT_SKIP.has(k)).slice(0, 6).map(k => { const i = statInfo(k); return i.label + ': ' + i.fmt(st[k]); });
-    if (s.cat === 'object') {
-      const d = OBJECTS[s.id];
-      if (s.id === 'chest') out.push(s.data && s.data.empty ? 'Looted this wave' : `Holds ${Lures.chestValue()} gold`);
-      else if (s.id === 'torch') out.push(`Lights ${num(CFG.torchRadius)} tiles: heroes take +${pct(CFG.torchExposed)} damage`);
-      else if (s.id === 'barricade') out.push(`Health: ${fmtInt(Math.max(0, s.hp || 0))}/${fmtInt(s.maxHp || d.hp)}`);
-      else if (s.id === 'well') out.push(`+${num(d.regen)} mana per second during waves`);
-      else if (s.id === 'lair') out.push(`Spawns every ${secs(d.spawnCd)} (max ${d.maxAlive})`);
+    if (s.cat === 'trap') return Traps.describe(s);
+    if (s.cat === 'object') return Objects.describe(s);
+    return s.ent ? Monsters.describe(s.ent) : [];
+  }
+  /** Percentage of spent gold refunded on selling (Salvager: 100%). */
+  const refundPct = () => (hasPerk('salvager') ? 100 : Math.round(CFG.sellRate * 100));
+  /** Mana every wave starts with (shown outside waves instead of stale leftovers). */
+  const manaAtStart = () => Math.min(S.manaMax, CFG.manaStart);
+  /** Waves survived in the current run (0 on the title screen). */
+  const runWaves = () => (S.phase === 'title' ? 0 : S.stats.wavesSurvived || 0);
+  /** Player-built structures + non-rubble walls (walls are cached per path version). */
+  function builtCount() {
+    if (U.wallKey !== S.pathVersion) {
+      U.wallKey = S.pathVersion;
+      let n = 0;
+      for (const t of S.tiles) if (t.type === T.WALL && !t.rubble) n++;
+      U.walls = n;
     }
-    return out;
+    return S.structs.length + U.walls;
   }
 
   /* ---------------------------------------------------------------------------
@@ -814,9 +752,12 @@ const UI = (() => {
     }
     U.lastGold = g;
     setText(el.hudGold, fmtInt(g));
-    // Mana
-    setWidth(el.hudManaFill, S.mana / Math.max(1, S.manaMax));
-    setText(el.hudManaTxt, `${Math.floor(S.mana)} / ${S.manaMax}`);
+    // Mana: live during waves; elsewhere what the next wave starts with (leftovers are reset anyway).
+    const waving = S.phase === 'wave';
+    const mana = waving ? S.mana : manaAtStart();
+    setWidth(el.hudManaFill, mana / Math.max(1, S.manaMax));
+    setText(el.hudManaTxt, waving ? `${Math.floor(mana)} / ${S.manaMax}` : `${mana} at start`);
+    setClass(el.hudManaFill, 'idle', !waving);
     // Heart
     const hp = Math.max(0, S.heartHp);
     setWidth(el.hudHeartFill, hp / Math.max(1, S.heartMax));
@@ -824,7 +765,8 @@ const UI = (() => {
     setClass(el.hudHeart, 'low', S.phase !== 'title' && hp / Math.max(1, S.heartMax) <= LOW_HEART);
     if (U.lastHeart !== null && hp < U.lastHeart) { el.hudHeart.classList.remove('hit'); void el.hudHeart.offsetWidth; el.hudHeart.classList.add('hit'); }
     U.lastHeart = hp;
-    setText(el.hudBest, Math.max(Save.data.bestWave || 0, S.phase === 'title' ? 0 : S.stats.wavesSurvived || 0));
+    setText(el.hudBest, Math.max(Save.data.bestWave || 0, runWaves()));
+    setClass(el.hudBestBox, 'record', runWaves() > (Save.data.bestWave || 0));
     // Controls
     for (const b of el.speedBtns) setClass(b, 'on', Number(b.getAttribute('data-speed')) === S.speed);
     const pauseName = S.paused ? 'play' : 'pause';
@@ -937,7 +879,7 @@ const UI = (() => {
     const sig = cardSignature();
     if (sig !== U.cardSig) { U.cardSig = sig; renderCards(); }
     setShown(el.buildLock, S.phase === 'wave');
-    setText(el.buildNote, S.ui.tool ? 'Placing: ' + ((contentDef(S.ui.tool.cat, S.ui.tool.id) || {}).name || '') : S.phase === 'build' ? S.structs.length + ' built' : '');
+    setText(el.buildNote, S.ui.tool ? 'Placing: ' + ((contentDef(S.ui.tool.cat, S.ui.tool.id) || {}).name || '') : S.phase === 'build' ? builtCount() + ' built' : '');
   }
 
   /** Click on a build card: select / deselect that tool. */
@@ -1078,7 +1020,7 @@ const UI = (() => {
         acts.push(actBtn('repair', px('wrench'), 'Repair', c ? c + 'g' : 'free', off, !building ? 'Repairs are made between waves.' : S.gold < c ? `Need ${c - S.gold} more gold.` : 'Restore it to working order.'));
       }
       const sv = Build.sellValue(s.x, s.y);
-      acts.push(actBtn('sell', px('coin'), 'Sell', '+' + sv + 'g', !building, building ? `Refund ${sv}g (${hasPerk('salvager') ? '100' : Math.round(CFG.sellRate * 100)}% of the gold spent). Del or right-click.` : 'Selling is only possible between waves.', 'btn-red'));
+      acts.push(actBtn('sell', px('coin'), 'Sell', '+' + sv + 'g', !building, building ? `Refund ${sv}g (${refundPct()}% of the gold spent). Del or right-click.` : 'Selling is only possible between waves.', 'btn-red'));
       m.actions = acts.join('');
       m.note = catLabel(s.cat);
       return m;
@@ -1086,7 +1028,7 @@ const UI = (() => {
     switch (t.type) {
       case T.WALL: {
         const sv = Build.sellValue(t.x, t.y);
-        m.head = inspHead(iconHTML('wall', 'wall'), t.rubble ? 'Rubble' : 'Stone Wall', t.rubble ? 'Collapsed by your power' : `Player-built · <span class="muted">paid ${fmtInt(t.paid)}g</span>`);
+        m.head = inspHead(iconHTML(t.rubble ? 'tile' : 'wall', t.rubble ? 'rubble' : 'wall'), t.rubble ? 'Rubble' : 'Stone Wall', t.rubble ? 'Collapsed by your power' : `Player-built · <span class="muted">paid ${fmtInt(t.paid)}g</span>`);
         m.lines = `<ul class="insp-lines"><li>Blocks movement and line of sight.</li>${t.rubble ? '<li>Clearing it gives no refund.</li>' : '<li>Arrow Walls can be mounted on it.</li>'}<li>Mages and Dwarf Miners can break through walls.</li></ul>`;
         m.actions = actBtn('sell', px(t.rubble ? 'hammer' : 'coin'), t.rubble ? 'Clear' : 'Sell', t.rubble ? '' : '+' + sv + 'g', !building,
           building ? (t.rubble ? 'Clear the rubble (no refund).' : `Refund ${sv}g.`) : 'Only possible between waves.', t.rubble ? '' : 'btn-red');
@@ -1104,7 +1046,7 @@ const UI = (() => {
         m.note = 'Terrain';
         return m;
       case T.HEART: {
-        m.head = inspHead(px('gem'), 'The Dungeon Heart', 'Protect it at all costs');
+        m.head = inspHead(iconHTML('tile', 'heart'), 'The Dungeon Heart', 'Protect it at all costs');
         m.lines = `<div class="insp-hp">HP ${hpBar(S.heartHp, S.heartMax, 'fill-heart')}</div><ul class="insp-lines"><li>Pulses for ${heartPulseText()}.</li><li>Regenerates ${CFG.heartRegenPerWave} HP after each wave.</li><li>If it shatters, the run ends.</li></ul>`;
         m.note = 'Heart';
         return m;
@@ -1154,7 +1096,6 @@ const UI = (() => {
    * 12. CENTRE — Start Wave bar, wave progress and board overlays
    * ------------------------------------------------------------------------ */
   function aliveHeroes() { let n = 0; for (const h of S.heroes) if (Spatial.heroAlive(h)) n++; return n; }
-  function wavesRemaining() { return has(typeof Waves !== 'undefined' ? Waves : null, 'remaining') ? safe(() => Waves.remaining(), 0, 'Waves.remaining') || 0 : 0; }
 
   function updateCentre() {
     const ph = S.phase;
@@ -1165,7 +1106,7 @@ const UI = (() => {
     setShown(el.waveProg, ph === 'wave');
     const nw = S.nextWave;
     if (building) {
-      const route = safe(() => Path.preview(), [], 'Path.preview') || [];
+      const route = Path.preview();
       const sealed = !route.length && !Path.reachable();
       const straight = Math.abs(S.heart.x - S.entrance.x) + Math.abs(S.heart.y - S.entrance.y);
       const parties = nw ? nw.parties.length : 0;
@@ -1176,13 +1117,13 @@ const UI = (() => {
       setHTML(el.wiMain, main);
       const sub = [];
       if (sealed) sub.push(`<span class="item bad">${px('bad')} The Heart is sealed off — open a path!</span>`);
-      else sub.push(`<span class="item">${px('route')} Route <b>${route.length}</b> tiles${route.length > straight ? ` <span class="good">(+${route.length - straight} from your maze)</span>` : ''}</span>`);
+      else sub.push(`<span class="item">${px('route')} Route <b>${route.length}</b> tiles${route.length > straight ? ` <span class="good">(+${route.length - straight} detour)</span>` : ''}</span>`);
       const broken = S.structs.reduce((n, s) => n + (s.broken ? 1 : 0), 0);
       if (broken) sub.push(`<span class="item warn">${px('wrench')} ${broken} broken — repair ${Build.totalRepairCost()}g</span>`);
       sub.push(`<span class="item">${px('coin')} +${Econ.waveIncome()}g after the wave</span>`);
       setHTML(el.wiSub, sub.join(''));
     } else if (ph === 'wave') {
-      const alive = aliveHeroes(), rem = wavesRemaining(), ws = S.ws || { kills: 0, escaped: 0 };
+      const alive = aliveHeroes(), rem = Waves.remaining(), ws = S.ws || { kills: 0, escaped: 0 };
       const total = Math.max(waveTotal(nw), (ws.spawned || 0) + rem, 1);
       const done = ws.kills + ws.escaped;
       setWidth(el.wpFill, done / total);
@@ -1288,7 +1229,7 @@ const UI = (() => {
     if (!ws) return;
     const alive = ph === 'wave' ? aliveHeroes() : 0;
     setText(el.lvAlive, alive);
-    setText(el.lvIncoming, ph === 'wave' ? wavesRemaining() : 0);
+    setText(el.lvIncoming, ph === 'wave' ? Waves.remaining() : 0);
     setText(el.lvSlain, ws.kills);
     setText(el.lvEscaped, ws.escaped);
     setClass(el.lvEscaped, 'bad', ws.escaped > 0);
@@ -1304,10 +1245,11 @@ const UI = (() => {
     }
     let line;
     if (best) {
-      const c = HERO_CLASSES[best.type];
-      const nm = heroName(best), cn = c ? c.name : best.type;
-      line = `${px('warn')} Closest: <b>${esc(nm)}</b>${nm !== cn ? ` <span class="muted">(${esc(cn)})</span>` : ''} · ${isFinite(bd) ? `<b class="${bd <= 6 ? 'bad' : ''}">${bd}</b> tiles to the Heart` : 'tunnelling'}`;
-    } else if (ph === 'wave') line = wavesRemaining() ? `${px('clock')} The next party is on its way…` : `${px('good')} The halls fall silent…`;
+      // Distance first so it never gets truncated; bosses need no class suffix.
+      const nm = heroName(best), cn = HERO_CLASSES[best.type].name;
+      const who = `<b>${esc(nm)}</b>${!best.boss && nm !== cn ? ` <span class="muted">(${esc(cn)})</span>` : ''}`;
+      line = isFinite(bd) ? `${px('warn')} <b class="${bd <= 6 ? 'bad' : ''}">${plural(bd, 'tile')}</b> from the Heart · ${who}` : `${px('warn')} Tunnelling · ${who}`;
+    } else if (ph === 'wave') line = Waves.remaining() ? `${px('clock')} The next party is on its way…` : `${px('good')} The halls fall silent…`;
     else line = ph === 'reward' ? `${px('good')} Every hero is dead or gone.` : '';
     setHTML(el.lvThreat, line);
     // Boss HP
@@ -1322,23 +1264,13 @@ const UI = (() => {
   }
 
   /* ---- DM powers ------------------------------------------------------------ */
-  const powerCost = id => (has(typeof Powers !== 'undefined' ? Powers : null, 'cost') ? safe(() => Powers.cost(id), POWERS[id].mana, 'Powers.cost') : POWERS[id].mana);
+  const powerCost = id => Powers.cost(id);
   /** Powers.canCast(id[, wx, wy]) normalised to {ok, reason}; the point (optional) also validates the target. */
   function powerCan(id, wx, wy) {
-    if (S.phase !== 'wave') return { ok: false, reason: 'Only during waves.' };
-    if (!has(typeof Powers !== 'undefined' ? Powers : null, 'canCast')) return { ok: false, reason: 'Unavailable.' };
-    const r = safe(() => (wx === undefined ? Powers.canCast(id) : Powers.canCast(id, wx, wy)), { ok: false, reason: 'Unavailable.' }, 'Powers.canCast');
-    return r && typeof r === 'object' ? r : { ok: !!r, reason: '' };
+    return wx === undefined ? Powers.canCast(id) : Powers.canCast(id, wx, wy);
   }
-  /** Why the last Powers.cast() failed, if the module reports it. */
-  const powerLastReason = () => (typeof Powers !== 'undefined' && Powers && typeof Powers.lastReason === 'string' ? Powers.lastReason : '');
-  function powerCd(id) {
-    if (has(typeof Powers !== 'undefined' ? Powers : null, 'cooldown')) {
-      const v = safe(() => Powers.cooldown(id), null, 'Powers.cooldown');
-      if (typeof v === 'number') return Math.max(0, v);
-    }
-    return Math.max(0, (S.powerCd && S.powerCd[id]) || 0);
-  }
+  /** Why the last Powers.cast() failed ('' after a success). Powers already floats it at the click. */
+  const powerLastReason = () => Powers.lastReason || '';
   function buildPowers() {
     el.powers.innerHTML = POWER_IDS.map(id => {
       const p = POWERS[id];
@@ -1350,7 +1282,7 @@ const UI = (() => {
     U.powerRefs = {};
     for (const b of el.powers.querySelectorAll('.power')) {
       const id = b.getAttribute('data-power');
-      U.powerRefs[id] = { btn: b, cost: b.querySelector('.pw-costn'), status: b.querySelector('.pw-status'), cdtxt: b.querySelector('.pw-cdtxt'), cd: -1, prev: 0 };
+      U.powerRefs[id] = { btn: b, cost: b.querySelector('.pw-costn'), status: b.querySelector('.pw-status'), cdtxt: b.querySelector('.pw-cdtxt'), cd: -1 };
     }
   }
   /** ~10 Hz: costs, enabled/armed state, mana bar. */
@@ -1370,7 +1302,7 @@ const UI = (() => {
       setClass(r.btn, 'nomana', S.mana < cost);
       setClass(r.btn, 'armed', armed);
       setAttr(r.btn, 'aria-disabled', can.ok ? 'false' : 'true');
-      const cd = powerCd(id);
+      const cd = Powers.cooldown(id);
       setText(r.status, armed ? 'Armed — pick a target' : can.ok ? 'Ready' : cd > 0 ? 'Recharging' : S.mana < cost ? `Needs ${Math.ceil(cost - S.mana)} more mana` : (can.reason || 'Unavailable'));
       setClass(r.status, 'ok', can.ok || armed);
     }
@@ -1380,12 +1312,8 @@ const UI = (() => {
     for (const id of POWER_IDS) {
       const r = U.powerRefs[id];
       if (!r) continue;
-      const cd = S.phase === 'wave' ? powerCd(id) : 0;
-      let max = U.cdMax[id] || POWERS[id].cd;
-      if (cd > (r.prev || 0) + 0.05) { max = Math.max(cd, 0.01); U.cdMax[id] = max; } // a new cooldown started
-      r.prev = cd;
-      const f = cd > 0 ? clamp(cd / max, 0, 1) : 0;
-      const q = Math.round(f * 200) / 200;
+      const cd = Powers.cooldown(id);
+      const q = Math.round(Powers.cooldownFrac(id) * 200) / 200; // quantised so the style is rarely rewritten
       if (q !== r.cd) { r.cd = q; r.btn.style.setProperty('--cd', q); }
       setText(r.cdtxt, cd > 0 ? (cd >= 1 ? Math.ceil(cd) + 's' : cd.toFixed(1)) : '');
     }
@@ -1450,6 +1378,7 @@ const UI = (() => {
       `<div class="title-foot"><button class="btn" data-act="help">${px('help')} How to play <kbd>H</kbd></button>` +
       `<button class="btn" data-act="mute">${px(SFX.muted ? 'mute' : 'sound')} Sound ${SFX.muted ? 'off' : 'on'} <kbd>M</kbd></button></div>`;
     openModal('title');
+    U.titleT = performance.now();
     refresh();
   }
   function bestBoxHTML(d) {
@@ -1459,10 +1388,10 @@ const UI = (() => {
     const br = d.bestRun || {};
     const perkIds = (br.perks || []).map(name => { const p = PERKS.find(q => q.name === name); return p ? p.id : null; }).filter(Boolean);
     return `<div class="best-box"><div class="bb-head">${px('trophy')} Best run${br.date ? `<span class="date">${esc(br.date)}</span>` : ''}</div>` +
-      `<div class="best-stats"><span>${px('flag')} <b>${fmtInt(d.bestWave || 0)}</b> waves survived</span><span>${px('skull')} <b>${fmtInt(d.bestKills || 0)}</b> heroes slain</span>` +
+      `<div class="best-stats"><span>${px('flag')} <b>${plural(d.bestWave || 0, 'wave')}</b> survived</span><span>${px('skull')} <b>${plural(d.bestKills || 0, 'hero', 'heroes')}</b> slain</span>` +
       (br.goldEarned != null ? `<span>${px('coin')} <b>${fmtInt(br.goldEarned)}</b> gold earned</span>` : '') +
       (br.favoriteTrap ? `<span>${px('star')} Favourite: <b>${esc(br.favoriteTrap)}</b></span>` : '') +
-      `<span class="muted">${fmtInt(d.runs || 0)} run${d.runs === 1 ? '' : 's'} played</span></div>` +
+      `<span class="muted">${plural(d.runs || 0, 'run')} played</span></div>` +
       (perkIds.length ? `<div class="best-perks">${perkIconsHTML(perkIds, null)}</div>` : '') + `</div>`;
   }
 
@@ -1474,11 +1403,11 @@ const UI = (() => {
     U.reward = { ids, t: performance.now() };
     closeModal('help');
     const bossName = sm.boss && HERO_BOSSES[sm.boss] ? HERO_BOSSES[sm.boss].name : null;
-    const bossKilled = !!sm.bossKilled || (sm.boss && S.stats.bossKills > U.bossKillsAtStart);
+    const bossKilled = !!sm.bossKilled;
     const sum = (icon, big, label, small, hl = '') => `<div class="sum${hl ? ' hl-' + hl : ''}">${px(icon)}<b>${big}</b><span>${label}</span>${small ? `<small>${small}</small>` : ''}</div>`;
     const tiles = [
       sum('skull', fmtInt(sm.kills || 0), 'Heroes slain', `of ${fmtInt(sm.spawned || 0)} who entered`, 'good'),
-      sum('coin', '+' + fmtInt(Math.max(0, sm.goldFromKills || 0)), 'Bounty & loot', 'from kills this wave', 'gold'),
+      sum('coin', '+' + fmtInt(Math.max(0, sm.goldFromKills || 0)), 'Gold earned', 'bounties, loot & perks', 'gold'),
       sum('tower', '+' + fmtInt(sm.income || 0), 'Wave income', hasPerk('midas') ? 'doubled by Midas Curse' : 'paid by your dark patrons', 'gold'),
       hasPerk('interest') || sm.interest ? sum('up', '+' + fmtInt(sm.interest || 0), 'Interest', '10% of unspent gold', 'gold')
         : sum('coin', fmtInt(S.gold), 'Treasury', 'gold to spend now', 'gold'),
@@ -1554,11 +1483,12 @@ const UI = (() => {
       sum('heart', fmtInt(r.heartDamage || 0), 'Heart damage', 'bad') + sum('tower', fmtInt(r.structures || 0), 'Structures') +
       `</div>` + fav +
       `<div class="m-section">Perks collected</div>` + perks +
-      `<div class="over-best">${px('trophy')} Best run: <b>${fmtInt(best.bestWave || 0)}</b> waves · <b>${fmtInt(best.bestKills || 0)}</b> slain` +
-      (best.bestRun && best.bestRun.date ? ` <span class="muted">(${esc(best.bestRun.date)})</span>` : '') + ` · ${fmtInt(best.runs || 0)} runs</div>` +
+      `<div class="over-best">${px('trophy')} Best run: <b>${plural(best.bestWave || 0, 'wave')}</b> · <b>${fmtInt(best.bestKills || 0)}</b> slain` +
+      (best.bestRun && best.bestRun.date ? ` <span class="muted">(${esc(best.bestRun.date)})</span>` : '') + ` · ${plural(best.runs || 0, 'run')} played</div>` +
       `<div class="m-actions"><button class="btn btn-gold btn-big" data-act="restart">${px('sword')} Restart <kbd>Enter</kbd></button>` +
       `<button class="btn btn-big" data-act="totitle">Title</button></div>`;
     openModal('over');
+    U.overT = performance.now();
     refresh();
   }
 
@@ -1581,12 +1511,12 @@ const UI = (() => {
       const c = HERO_CLASSES[k];
       return `<div class="cls-row" data-tip="hero|${k}|0||${S ? S.wave : 1}">${iconHTML('hero', k)}<span><b>${esc(c.name)}</b> <span class="muted">(${esc(c.role)}, from wave ${c.minWave})</span> — ${esc(c.desc)}</span></div>`;
     }).join('');
-    const pw = POWER_IDS.map(id => { const p = POWERS[id]; return `<div class="pw-row"><kbd>${p.key}</kbd><span class="e">${p.icon}</span><span><b>${esc(p.name)}</b> <span class="manac">(${p.mana} mana)</span> — ${esc(p.desc)}</span></div>`; }).join('');
+    const pw = POWER_IDS.map(id => { const p = POWERS[id]; return `<div class="pw-row"><kbd>${p.key}</kbd><span class="e">${p.icon}</span><span><b>${esc(p.name)}</b> <span class="manac">(${Powers.cost(id)} mana)</span> — ${esc(p.desc)}</span></div>`; }).join('');
     const rar = Object.keys(RARITY).map(r => `<span><i style="border-color:${RARITY[r].color}"></i>${esc(RARITY[r].name)}</span>`).join('');
     return corners + `<button class="btn m-x" data-act="closehelp" data-tip="text|Close (Esc)">✕</button>` +
       `<h2 class="m-title">Dungeon Master's Handbook</h2><p class="m-sub">Keep the adventurers from destroying your Heart. Survive as many waves as you can.</p>` +
       `<div class="help-grid">` +
-      `<div class="help-sec"><h3>${px('hammer')} Building</h3><p>Pick a card on the left, then <b>click or drag</b> on the board. <b>Walls</b> shape a maze — heroes must always have a path to the Heart (placements that seal it are refused). With no card selected, <b>click</b> a structure to upgrade, repair or sell it; <b>right-click</b> sells instantly (${Math.round(CFG.sellRate * 100)}% refund).</p>` +
+      `<div class="help-sec"><h3>${px('hammer')} Building</h3><p>Pick a card on the left, then <b>click or drag</b> on the board. <b>Walls</b> shape a maze — heroes must always have a path to the Heart (placements that seal it are refused). With no card selected, <b>click</b> a structure to upgrade, repair or sell it; <b>right-click</b> sells instantly (${refundPct()}% refund).</p>` +
       `<p>Traps and monsters have 3 levels. Broken traps stay broken until repaired. Only one boss may guard the dungeon.</p></div>` +
       `<div class="help-sec"><h3>${px('eye')} How heroes think</h3><ul>` +
       `<li><b>Danger memory</b> — heroes remember where companions died and traps were found, and route around it next time. It fades between waves. Toggle <b>Memory</b> to see it.</li>` +
@@ -1616,8 +1546,7 @@ const UI = (() => {
    * ------------------------------------------------------------------------ */
   /** Screen → world through Render; null when outside the board. */
   function worldAt(cx, cy) {
-    if (typeof Render === 'undefined' || !Render || typeof Render.screenToWorld !== 'function') return null;
-    const p = safe(() => Render.screenToWorld(cx, cy), null, 'Render.screenToWorld');
+    const p = Render.screenToWorld(cx, cy);
     return p && p.inside ? p : null;
   }
   function setHover(p) {
@@ -1753,8 +1682,11 @@ const UI = (() => {
     if (!c.ok) { SFX.play('error'); failToast(c.reason || `${POWERS[id].name} is not ready.`, 'warn'); return; }
     if (POWERS[id].target === 'none') {
       const hv = S.ui.hover;
-      const ok = safe(() => Powers.cast(id, hv ? hv.wx : Heart.cx(), hv ? hv.wy : Heart.cy()), false, 'Powers.cast');
-      if (!ok) { SFX.play('error'); failToast(powerLastReason() || powerCan(id).reason || `${POWERS[id].name} failed.`, 'warn'); }
+      // A refused cast is already floated at the target with an error buzz by Powers; toast only if it gave no reason.
+      if (!Powers.cast(id, hv ? hv.wx : Heart.cx(), hv ? hv.wy : Heart.cy()) && !powerLastReason()) {
+        SFX.play('error');
+        failToast(`${POWERS[id].name} failed.`, 'warn');
+      }
       S.ui.power = null;
     } else {
       S.ui.power = id;
@@ -1768,11 +1700,10 @@ const UI = (() => {
     if (!id) return;
     const before = powerCan(id);
     if (!before.ok) { SFX.play('error'); failToast(before.reason, 'warn'); S.ui.power = null; refreshNow(); return; }
-    const ok = safe(() => Powers.cast(id, p.wx, p.wy), false, 'Powers.cast');
-    if (ok) S.ui.power = null; // stays armed after a bad target so the player can simply click again
-    else {
+    if (Powers.cast(id, p.wx, p.wy)) S.ui.power = null; // stays armed after a bad target so the player can click again
+    else if (!powerLastReason()) { // Powers normally floats its own reason at the click — don't repeat it as a toast
       SFX.play('error');
-      failToast(powerLastReason() || castFailReason(id, p), 'warn');
+      failToast(castFailReason(id, p), 'warn');
     }
     refreshNow();
   }
@@ -1782,7 +1713,7 @@ const UI = (() => {
     if (POWERS[id].target === 'hero') {
       const h = Spatial.nearestHero(p.wx, p.wy, 0.9);
       if (!h) return 'Click directly on a hero.';
-      if (HERO_CLASSES[h.type].fearImmune || h.boss) return 'Immune to fear.';
+      if (Status.fearImmune(h)) return 'Immune to fear.';
     }
     const c = powerCan(id, p.wx, p.wy);
     return (!c.ok && c.reason) || 'Cannot cast there.';
@@ -1814,7 +1745,7 @@ const UI = (() => {
         return;
       }
       case 'gameover':
-        if (k === 'Enter' && !e.repeat) { e.preventDefault(); newRun(); }
+        if (k === 'Enter' && !e.repeat && !justOpened(U.overT)) { e.preventDefault(); newRun(); }
         return;
       case 'build': {
         if (k === 'Enter' && !e.repeat) { e.preventDefault(); startWave(); return; }
@@ -1841,6 +1772,8 @@ const UI = (() => {
   }
 
   /* ---- Commands shared by buttons and keys ----------------------------------- */
+  /** True for a moment after a modal opened, so a click meant for the board can't dismiss its summary. */
+  const justOpened = t => performance.now() - t < MODAL_GUARD_MS;
   function newRun() { SFX.play('click'); Game.newRun(); }
   function startWave() {
     if (!S || S.phase !== 'build') return;
@@ -1906,8 +1839,9 @@ const UI = (() => {
       case 'btnMute': toggleMute(); return;
       case 'btnHelp': openHelp(); return;
       case 'btnRepairAll': if (off) { SFX.play('error'); failToast(S.phase === 'build' ? 'Not enough gold to repair anything.' : 'Repairs are made between waves.', 'warn'); return; } repairAll(); return;
-      case 'newrun': case 'restart': newRun(); return;
-      case 'totitle': SFX.play('click'); Game.toTitle(); return;
+      case 'newrun': if (!justOpened(U.titleT)) newRun(); return;
+      case 'restart': if (!justOpened(U.overT)) newRun(); return;
+      case 'totitle': if (!justOpened(U.overT)) { SFX.play('click'); Game.toTitle(); } return;
       case 'continue': pickPerk(null); return;
       case 'help': openHelp(); return;
       case 'closehelp': SFX.play('click'); closeHelp(); return;
@@ -1941,7 +1875,7 @@ const UI = (() => {
     for (const t of BUILD_TABS) for (const [c, i] of t.items) if (Build.isUnlocked(c, i)) U.seen.add(c + ':' + i);
     clearToasts();
     U.cardSig = ''; U.previewSig = ''; U.previewFor = undefined; U.perkSig = null;
-    U.lastGold = null; U.lastHeart = null; U.cdMax = {};
+    U.lastGold = null; U.lastHeart = null;
     U.tab = BUILD_TABS[0].id;
     if (el.cards) el.cards.scrollTop = 0;
     endDrag();
@@ -1960,7 +1894,7 @@ const UI = (() => {
     U.resizeQueued = true;
     requestAnimationFrame(() => {
       U.resizeQueued = false;
-      if (S && typeof Render !== 'undefined' && Render && typeof Render.resize === 'function') safe(() => Render.resize(), null, 'Render.resize');
+      if (S) Render.resize();
     });
   }
   /** Everything that refreshes at ~10 Hz. */
@@ -2006,11 +1940,7 @@ const UI = (() => {
     if (phase !== 'gameover') closeModal('over');
     S.paused = false; // every phase starts running (the help overlay re-pauses a wave if it is open)
     U.helpPaused = false;
-    if (phase === 'wave') {
-      U.bossKillsAtStart = S.stats.bossKills;
-      U.cdMax = {};
-      for (const t of BUILD_TABS) markSeen(t.id); // NEW markers last until the first wave after the unlock
-    }
+    if (phase === 'wave') for (const t of BUILD_TABS) markSeen(t.id); // NEW markers last until the first wave after the unlock
     if (phase === 'build') S.ui.selected = null; // the grid may have expanded (coordinates shift)
     if (Tip.src === 'board') Tip.hide();
     refresh();
@@ -2029,11 +1959,9 @@ const UI = (() => {
    * 17. INIT
    * ------------------------------------------------------------------------ */
   function init() {
-    const need = ['app', 'boardWrap', 'tabs', 'cards', 'inspBody', 'toasts', 'tip', 'btnStart', 'previewBody', 'powers', 'perkGrid', 'mTitle', 'mReward', 'mOver', 'mHelp'];
-    if (need.some(id => !$(id))) { console.warn('[UI] shell markup missing — UI disabled.'); return; }
     hydratePixels(document);
     const ids = ['boardWrap', 'toasts', 'boardBanner', 'boardHint', 'tip', 'hudWave', 'hudBoss', 'hudGold', 'hudGoldBox', 'hudManaFill', 'hudManaTxt',
-      'hudHeart', 'hudHeartFill', 'hudHeartTxt', 'hudBest', 'btnPause', 'btnRoute', 'btnMemory', 'btnMute', 'btnHelp', 'tabs', 'cards', 'buildLock',
+      'hudHeart', 'hudHeartFill', 'hudHeartTxt', 'hudBest', 'hudBestBox', 'btnPause', 'btnRoute', 'btnMemory', 'btnMute', 'btnHelp', 'tabs', 'cards', 'buildLock',
       'buildNote', 'inspBody', 'inspNote', 'btnRepairAll', 'btnStart', 'wiMain', 'wiSub', 'waveProg', 'wpTag', 'wpFill', 'wpTxt', 'pvTitle', 'pvNote',
       'previewBody', 'liveTitle', 'liveNote', 'lvAlive', 'lvIncoming', 'lvSlain', 'lvEscaped', 'lvHeartDmg', 'lvGold', 'lvThreat', 'lvBoss',
       'pwNote', 'pwManaFill', 'pwManaTxt', 'powers', 'perkNote', 'perkGrid', 'titleCard', 'rewardCard', 'overCard', 'helpCard'];

@@ -164,6 +164,8 @@ b, strong { font-weight: 700; }
 .hud-gold.up b { animation: bumpGood .5s ease-out; }
 .hud-gold.down b { animation: bumpBad .5s ease-out; }
 .hud-best b { color: var(--text2); }
+.hud-best.record { border-color: var(--gold3); box-shadow: inset 0 1px 3px rgba(0, 0, 0, .7), 0 0 8px rgba(232, 182, 76, .35); }
+.hud-best.record b { color: var(--gold2); }
 @keyframes bumpGood { 0% { color: #b6ffc6; text-shadow: 0 0 10px #62d27f; transform: scale(1.18); } 100% { transform: none; } }
 @keyframes bumpBad { 0% { color: #ffb0b8; text-shadow: 0 0 10px #ff5364; transform: scale(.9); } 100% { transform: none; } }
 .badge {
@@ -196,6 +198,7 @@ b, strong { font-weight: 700; }
   text-shadow: 0 1px 0 #000, 0 0 3px #000, 1px 0 0 #000, -1px 0 0 #000;
 }
 .fill-mana { background: linear-gradient(180deg, #8cc0ff, #3f8cff 55%, #2358c8); }
+.fill-mana.idle { opacity: .5; filter: saturate(.6); } /* outside waves: what the next wave starts with */
 .fill-heart { background: linear-gradient(180deg, #ff8a9c, #d62644 55%, #8e1028); }
 .fill-hp { background: linear-gradient(180deg, #9af0ae, #3fae5c 60%, #257a3c); }
 .fill-hp.mid { background: linear-gradient(180deg, #ffe08a, #e0a826 60%, #9a6c10); }
@@ -260,7 +263,6 @@ b, strong { font-weight: 700; }
 .ico { display: block; width: 2rem; height: 2rem; image-rendering: pixelated; object-fit: contain; }
 .ico.glyph { display: flex; align-items: center; justify-content: center; font-size: 1.35rem; line-height: 1; filter: drop-shadow(0 1px 1px #000); }
 .ico.mini { display: inline-flex; width: 1.05rem; height: 1.05rem; vertical-align: -.2em; }
-.ico.glyph.mini { font-size: .8rem; }
 .card-key { position: absolute; left: -3px; top: -4px; font-size: .56rem; min-width: 1.2em; padding: 0 .2em; line-height: 1.45; opacity: .9; }
 .card-main { min-width: 0; display: flex; flex-direction: column; gap: .08rem; }
 .card-top { display: flex; align-items: baseline; gap: .4rem; }
@@ -295,7 +297,7 @@ b, strong { font-weight: 700; }
 body.phase-wave #cards, body.phase-reward #cards, body.phase-gameover #cards { filter: saturate(.5) brightness(.75); }
 
 /* ---- 8. Inspector ----------------------------------------------------------------- */
-#secInspect { flex: 0 1 auto; max-height: 52%; }
+#secInspect { flex: 0 0 auto; max-height: 52%; } /* the scrolling card list gives up space first */
 #inspBody { padding: .5rem .6rem .55rem; display: flex; flex-direction: column; gap: .4rem; }
 .insp-empty { font-size: .76rem; color: var(--text3); line-height: 1.45; }
 .insp-empty b { color: var(--text2); }
@@ -724,7 +726,14 @@ body.phase-title #secPerks { flex: 1 1 auto; max-height: none; }
   #cards { max-height: 26rem; }
   #secInspect, #secPerks, #secPreview { max-height: none; flex: none; }
   #previewBody { max-height: 30rem; }
-  body.phase-wave #secBuild { display: none; } /* nothing to build mid-wave: bring powers up */
+  body.phase-wave #secBuild { display: none; } /* nothing to build mid-wave */
+  /* DM Powers dock to the bottom of the screen during waves so they are always reachable. */
+  body.phase-wave #secPowers { position: fixed; left: 0; right: 0; bottom: 0; z-index: 30; border-radius: 0; border-width: 1px 0 0; box-shadow: 0 -8px 24px rgba(0, 0, 0, .7); }
+  body.phase-wave #secPowers .panel-head { display: none; }
+  body.phase-wave .mana-line { padding: .35rem .55rem 0; }
+  body.phase-wave .powers { flex-direction: row; padding: .3rem .45rem .45rem; }
+  body.phase-wave .power { min-width: 0; }
+  body.phase-wave #app { padding-bottom: 5.4rem; }
   .sum-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .help-grid { grid-template-columns: 1fr; }
   .modal { align-items: flex-start; overflow-y: auto; }
@@ -732,6 +741,14 @@ body.phase-title #secPerks { flex: 1 1 auto; max-height: none; }
 }
 @media (max-width: 700px) {
   #main { grid-template-columns: minmax(0, 1fr); grid-template-areas: "center" "left" "right"; }
+  /* compact docked powers: icon, name and cost stacked */
+  body.phase-wave .power { display: flex; flex-direction: column; align-items: center; gap: .1rem; min-height: 0; padding: .25rem .2rem; text-align: center; }
+  body.phase-wave .power .pw-status, body.phase-wave .power kbd { display: none; }
+  body.phase-wave .pw-ico { width: 1.9rem; height: 1.9rem; font-size: 1.05rem; }
+  body.phase-wave .pw-text { max-width: 100%; }
+  body.phase-wave .pw-name { font-size: .64rem; }
+  body.phase-wave .pw-cost { font-size: .68rem; }
+  body.phase-wave #app { padding-bottom: 6.6rem; }
   .perk-row { grid-template-columns: 1fr; }
   .howto { grid-template-columns: 1fr; }
   .btn.toggle span { display: none; }
@@ -760,7 +777,7 @@ body.phase-title #secPerks { flex: 1 1 auto; max-height: none; }
       <div class="hud-stat hud-gold" id="hudGoldBox" data-tip="hud|gold"><i data-px="coin"></i><b id="hudGold">0</b></div>
       <div class="meter meter-mana" data-tip="hud|mana"><i data-px="mana"></i><div class="bar"><i class="fill fill-mana" id="hudManaFill"></i><span id="hudManaTxt">0 / 100</span></div></div>
       <div class="meter meter-heart" id="hudHeart" data-tip="hud|heart"><i data-px="heart"></i><div class="bar"><i class="fill fill-heart" id="hudHeartFill"></i><span id="hudHeartTxt">100 / 100</span></div></div>
-      <div class="hud-stat hud-best" data-tip="hud|best"><i data-px="trophy"></i><span class="lbl">Best</span><b id="hudBest">0</b></div>
+      <div class="hud-stat hud-best" id="hudBestBox" data-tip="hud|best"><i data-px="trophy"></i><span class="lbl">Best</span><b id="hudBest">0</b></div>
     </div>
     <div class="controls">
       <div class="seg" id="speedSeg">

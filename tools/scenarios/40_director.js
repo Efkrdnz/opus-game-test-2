@@ -149,11 +149,12 @@
   add('perks: Heart of Thorns triples the pulse', H => {
     const S = H.S;
     H.startWave(); H.keepAlive();
-    const a = tough(H.hero('warrior', S.heart.x - 1, S.heart.y)); a.speed = 0; a.st.rootT = 99;
-    H.step(3.05); const d1 = 5000 - a.hp;
+    // maxHp 100 keeps the %-of-max-HP part of the pulse small; hp is huge so nobody dies.
+    const a = H.hero('warrior', S.heart.x - 1, S.heart.y); a.maxHp = 100; a.hp = 1e6; a.speed = 0; a.st.rootT = 99; a.heartDmg = 0;
+    H.step(3.05); const d1 = 1e6 - a.hp;
     H.perk('thorns');
-    const b = tough(H.hero('warrior', S.heart.x, S.heart.y - 1)); b.speed = 0; b.st.rootT = 99;
-    H.step(3.05); const d2 = 5000 - b.hp;
+    const b = H.hero('warrior', S.heart.x, S.heart.y - 1); b.maxHp = 100; b.hp = 1e6; b.speed = 0; b.st.rootT = 99; b.heartDmg = 0;
+    H.step(3.05); const d2 = 1e6 - b.hp;
     H.assert(d2 >= d1 * 2, `thorns ${d1} → ${d2}`);
   });
 })();

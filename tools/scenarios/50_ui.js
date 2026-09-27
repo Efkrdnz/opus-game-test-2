@@ -3,7 +3,7 @@
   const add = (name, run, tags = ['ui']) => window.SCENARIOS.push({ name, run, tags });
   const visibleText = () => document.body.innerText || '';
 
-  add('ui: reward modal offers 3 perk cards and picking one advances', H => {
+  add('ui: reward modal offers 3 perk cards and picking one advances', async H => {
     const S = H.S;
     H.startWave();
     const h = H.hero('rogue', 3, S.entrance.y);
@@ -12,7 +12,9 @@
     const cards = [...document.querySelectorAll('[data-perk]')].filter(e => e.offsetParent !== null);
     H.assert(cards.length === 3, 'three visible perk cards (' + cards.length + ')');
     const id = cards[1].getAttribute('data-perk');
+    await new Promise(r => setTimeout(r, 1200)); // the UI ignores clicks for a moment to prevent accidental picks
     cards[1].click();
+    await new Promise(r => setTimeout(r, 100));
     H.assert(S.phase === 'build' && S.perks[id], 'picked ' + id);
   });
 
@@ -32,7 +34,7 @@
 
   add('ui: every build item has an icon data URL', H => {
     for (const tab of BUILD_TABS) for (const [cat, id] of tab.items) {
-      const url = H.DH.Render && window.Sprites ? Sprites.iconURL(cat === 'wall' ? 'wall' : cat, id) : '';
+      const url = typeof Sprites !== 'undefined' ? Sprites.iconURL(cat === 'wall' ? 'wall' : cat, id) : '';
       H.assert(typeof url === 'string' && url.startsWith('data:image'), `icon ${cat}:${id}`);
     }
     for (const id of Object.keys(HERO_CLASSES)) H.assert(Sprites.iconURL('hero', id).startsWith('data:image'), 'hero icon ' + id);

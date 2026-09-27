@@ -61,6 +61,7 @@ const Waves = {
   update(dt) { this._t -= dt; if (this._q.length && this._t <= 0) { const p = this._q.shift(); Heroes.spawnParty(p.members); this._t = 5; } },
   done() { return !this._q || !this._q.length; },
   remaining() { return this._q ? this._q.reduce((a, p) => a + p.members.length, 0) : 0; },
+  current: null,
 };
 
 //@@ Perks
@@ -72,8 +73,11 @@ const Perks = {
 
 //@@ Powers
 const Powers = {
+  lastReason: '',
   onWaveStart() {}, update(dt) { S.mana = Math.min(S.manaMax, S.mana + CFG.manaRegen * dt); },
+  manaRegen() { return CFG.manaRegen; },
   cost(id) { return POWERS[id].mana; }, canCast() { return { ok: false, reason: 'stub' }; }, cast() { return false; }, ready() { return false; },
+  cooldown() { return 0; }, cooldownFrac() { return 0; },
 };
 
 //@@ Render

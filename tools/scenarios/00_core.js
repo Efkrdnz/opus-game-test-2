@@ -107,9 +107,9 @@
     H.perk('undying_heart');
     const near = H.hero('rogue', S.heart.x - 1, S.heart.y);
     H.DH.Heart.damage(9999);
-    H.assert(S.heartHp === 1 && S.undyingUsed, 'undying saved the heart');
+    H.assert(S.heartHp === Math.round(S.heartMax * 0.25) && S.undyingUsed, 'undying left the heart at 25%');
     H.assert(near.st.fearT > 0, 'fear nova');
-    H.DH.Heart.damage(5);
+    H.DH.Heart.damage(9999);
     H.assert(S.heartHp === 0 && S.endingT > 0, 'second lethal blow destroys it');
   });
 
@@ -147,7 +147,7 @@
     const base = hp - h.hp;
     H.perk('glass_cannon');
     hp = h.hp; H.DH.Combat.damage(h, 20, { team: 'dm', kind: 'trap', id: 'spike' });
-    H.assert(hp - h.hp === Math.round(base * 1.6), 'glass cannon +60%');
+    H.assert(hp - h.hp === Math.round(base * 1.4), 'glass cannon +40%');
     h.st.exposed = true;
     hp = h.hp; H.DH.Combat.damage(h, 20, { team: 'dm', kind: 'power', id: 'x' });
     H.assert(hp - h.hp === 25, 'exposed +25%');

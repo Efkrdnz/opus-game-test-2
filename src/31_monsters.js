@@ -82,7 +82,7 @@ const Monsters = (() => {
     return n;
   }
   /** Dragon's Hoard: +10% dragon damage per Treasure Chest owned. */
-  const hoardMul = () => (hasPerk('dragons_hoard') ? 1 + 0.1 * chestCount() : 1);
+  const hoardMul = () => (hasPerk('dragons_hoard') ? 1 + 0.1 * Math.min(5, chestCount()) : 1);
   /** Adrenaline: +35% damage and speed while the Heart is below half HP. */
   const adrenalineOn = () => hasPerk('adrenaline') && S.heartHp < S.heartMax * 0.5;
 

@@ -146,15 +146,15 @@
     H.assert(S.lastSummary.interest === 50, 'interest 10% (got ' + S.lastSummary.interest + ')');
   });
 
-  add('perks: Heart of Thorns triples the pulse', H => {
+  add('perks: Heart of Thorns doubles the pulse', H => {
     const S = H.S;
     H.startWave(); H.keepAlive();
-    // maxHp 100 keeps the %-of-max-HP part of the pulse small; hp is huge so nobody dies.
+    // maxHp 100 keeps the %-of-max-HP part small; hp is huge so nobody dies. Exactly one pulse per window.
     const a = H.hero('warrior', S.heart.x - 1, S.heart.y); a.maxHp = 100; a.hp = 1e6; a.speed = 0; a.st.rootT = 99; a.heartDmg = 0;
-    H.step(3.05); const d1 = 1e6 - a.hp;
+    S.heartPulseT = 0.01; H.step(0.5); const d1 = 1e6 - a.hp;
     H.perk('thorns');
-    const b = H.hero('warrior', S.heart.x, S.heart.y - 1); b.maxHp = 100; b.hp = 1e6; b.speed = 0; b.st.rootT = 99; b.heartDmg = 0;
-    H.step(3.05); const d2 = 1e6 - b.hp;
-    H.assert(d2 >= d1 * 2, `thorns ${d1} → ${d2}`);
+    a.hp = 1e6;
+    S.heartPulseT = 0.01; H.step(0.5); const d2 = 1e6 - a.hp;
+    H.assert(d1 > 0 && d2 === d1 * 2, `thorns doubles the pulse ${d1} → ${d2}`);
   });
 })();

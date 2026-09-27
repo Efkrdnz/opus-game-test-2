@@ -69,7 +69,7 @@ const Traps = (() => {
   const BLEED_OPT = { dps: BLEED_DPS, dur: BLEED_DUR, src: SRC.spike };
 
   /* ---- 1.3 Numbers (level + perks) -----------------------------------------
-   * These are the values the simulation uses. Glass Cannon (+60% trap damage)
+   * These are the values the simulation uses. Glass Cannon (+40% trap damage)
    * is applied by core Combat.damage, so it only shows up in stats().        */
   /** Per-level value: arrays are [L1, L2, L3]; scalars apply to every level. */
   const lv = (v, L) => (Array.isArray(v) ? v[L >= 3 ? 2 : L >= 2 ? 1 : 0] : v);
@@ -77,6 +77,7 @@ const Traps = (() => {
     let c = lv(TRAPS[id].cd, L) || 0;
     if (id === 'arrow' && hasPerk('quick_reload')) c *= 0.7;
     if (id === 'boulder' && hasPerk('stonemason')) c *= 0.75;
+    if (hasPerk('trapmaster')) c *= 0.8;
     return c;
   }
   function damage(id, L) {
@@ -100,7 +101,7 @@ const Traps = (() => {
   function stats(id, level) {
     if (!TRAPS[id]) return {};
     const L = level || 1;
-    const g = hasPerk('glass_cannon') ? 1.6 : 1;
+    const g = hasPerk('glass_cannon') ? 1.4 : 1;
     const r2 = v => Math.round(v * 100) / 100;
     const hidden = isHiddenType(id);
     switch (id) {

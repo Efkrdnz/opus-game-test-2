@@ -53,7 +53,7 @@ const Heroes = (() => {
     sepMax: 0.05,                    // max separation displacement per tick (no violent shoves)
     sepTwist: 0.42,                  // lateral bias so heroes meeting head-on slide past each other
     queueR: 0.56,                    // slow down behind a stationary ally within this distance
-    rushSpeed: 1.25, chargeSpeed: 1.3, fleeSpeed: 1.1, timeWarp: 0.85, cursedGold: 0.6,
+    rushSpeed: 1.25, chargeSpeed: 1.3, fleeSpeed: 1.1, timeWarp: 0.75, cursedGold: 0.6,
     stuckWindow: 1, stuckMove: 0.12,
     // Strategy
     rushDist: 6, rushExit: 9,        // Path.heartDist hysteresis for the final rush
@@ -702,7 +702,7 @@ const Heroes = (() => {
     if (m && !monsterOk(m)) { clearEngage(h); m = null; }
     // Orcish Warcry: heroes near an Orc MUST fight it.
     if (hasPerk('warcry')) {
-      const orc = nearestMonster(h, K.tauntR, predOrc, false);
+      const orc = nearestMonster(h, K.tauntR, predOrc, true); // must SEE the Orc (no taunts through walls)
       if (orc) {
         if (m !== orc || ai.engageKind !== 'taunt') { cancelChannel(h); ai.atHeart = false; setEngage(h, orc, 'taunt'); }
         return;

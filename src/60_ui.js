@@ -545,9 +545,9 @@ const UI = (() => {
       }
     }
   }
-  /** Human text for the Heart's retaliation pulse (flat + % of the victim's max HP, ×3 with Heart of Thorns). */
+  /** Human text for the Heart's retaliation pulse (flat + % of the victim's max HP, ×2 with Heart of Thorns). */
   function heartPulseText() {
-    const mul = hasPerk('thorns') ? 3 : 1;
+    const mul = Heart.pulseMul();
     const flat = CFG.heartPulseDmg * mul, frac = (CFG.heartPulsePct || 0) * mul;
     return `${flat}${frac ? ' + ' + pct(frac) + ' of max HP' : ''} damage every ${secs(CFG.heartPulseCd)} to heroes beside or attacking it`;
   }
@@ -603,7 +603,8 @@ const UI = (() => {
     if (p.tradeoff) badges.push('<span class="badge badge-trade">Tradeoff</span>');
     if (p.repeatable) badges.push('<span class="badge badge-rep">Repeatable</span>');
     if (n > 1) badges.push(`<span class="badge badge-rep">×${n}</span>`);
-    const unl = p.unlocks ? `<div class="tt-foot">${px('lock')} Unlocks: <b>${p.unlocks.map(([c, i]) => esc((contentDef(c, i) || { name: i }).name)).join(', ')}</b></div>` : '';
+    const pend = p.unlocks ? p.unlocks.filter(([c, i]) => !Build.isUnlocked(c, i)) : [];
+    const unl = pend.length ? `<div class="tt-foot">${px('lock')} Unlocks: <b>${pend.map(([c, i]) => esc((contentDef(c, i) || { name: i }).name)).join(', ')}</b></div>` : '';
     return tipHead(`<span class="ico glyph">${p.icon}</span>`, esc(p.name), `<span class="rar" style="color:${col}">${esc(RARITY[p.rarity] ? RARITY[p.rarity].name : p.rarity)}</span>`, badges.join(' ')) +
       `<div class="tt-desc">${esc(p.desc)}</div>` + unl;
   }
@@ -1443,7 +1444,8 @@ const UI = (() => {
     const owned = S.perks[id] || 0;
     const badges = [];
     if (p.tradeoff) badges.push('<span class="badge badge-trade">Tradeoff</span>');
-    if (p.unlocks) badges.push(`<span class="badge badge-unlock">${px('lock')}Unlocks ${esc(p.unlocks.map(([c, x]) => (contentDef(c, x) || { name: x }).name).join(', '))}</span>`);
+    const pend = p.unlocks ? p.unlocks.filter(([c, x]) => !Build.isUnlocked(c, x)) : [];
+    if (pend.length) badges.push(`<span class="badge badge-unlock">${px('lock')}Unlocks ${esc(pend.map(([c, x]) => (contentDef(c, x) || { name: x }).name).join(', '))}</span>`);
     if (p.repeatable) badges.push(`<span class="badge badge-rep">${owned ? 'Owned ×' + owned : 'Repeatable'}</span>`);
     return `<div class="perk-card r-${esc(p.rarity)}" style="--rc:${col}" data-perk="${esc(id)}" role="button" tabindex="-1">` +
       `<kbd>${i + 1}</kbd><span class="rar pc-rar">${esc(RARITY[p.rarity] ? RARITY[p.rarity].name : p.rarity)}</span>` +

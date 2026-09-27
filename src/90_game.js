@@ -176,6 +176,7 @@ const Game = {
     S.stats.escaped++;
     if (S.ws) S.ws.escaped++;
     if (h.loot > 0) Econ.steal(h.loot, h.x + 0.5, h.y - 0.5);
+    else if (hasPerk('blood_money')) Econ.steal(Math.round(HERO_CLASSES[h.type].gold * (1 + CFG.bountyPerWave * (S.wave - 1))), h.x + 0.5, h.y - 0.5); // ×3 inside steal()
     else FX.text(h.x + 0.6, h.y - 0.5, 'Fled', '#cccccc', { size: 10 });
     h.loot = 0;
   },

@@ -480,8 +480,12 @@ const Perks = (() => {
     offerable(p) {
       if (!p || !S) return false;
       if (S.perks[p.id] && !p.repeatable) return false;
-      if (p.req && !Build.isUnlocked(p.req[0], p.req[1])) return false;
-      if (p.unlocks && !p.unlocks.some(([cat, id]) => !Build.isUnlocked(cat, id))) return false;
+      // Offers are made in the reward phase, i.e. for the build phase of the NEXT wave: content whose
+      // milestone arrives then counts as unlocked (so unlock perks aren't wasted, req perks aren't late).
+      const next = S.phase === 'build' ? S.wave : S.wave + 1;
+      const ready = (cat, id) => Build.isUnlocked(cat, id) || ((contentDef(cat, id) || {}).unlock || Infinity) <= next;
+      if (p.req && !ready(p.req[0], p.req[1])) return false;
+      if (p.unlocks && !p.unlocks.some(([cat, id]) => !ready(cat, id))) return false;
       return true;
     },
     /** Every perk definition that could be offered right now. */

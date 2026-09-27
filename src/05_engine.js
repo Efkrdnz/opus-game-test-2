@@ -584,7 +584,7 @@ function makeStatus() {
   return {
     slow: 0, slowT: 0, burn: 0, burnT: 0, burnSrc: null, bleed: 0, bleedT: 0, bleedSrc: null,
     stunT: 0, rootT: 0, fearT: 0, fearX: 0, fearY: 0, buffT: 0, buffDmg: 1, buffSpd: 1,
-    dotT: 0, exposed: false, invisT: 0,
+    dotT: 0, burnAcc: 0, bleedAcc: 0, exposed: false, invisT: 0,
   };
 }
 
@@ -713,16 +713,21 @@ const Status = {
       st.dotT += dt;
       if (st.dotT >= 0.5) {
         st.dotT -= 0.5;
+        // Fractional damage is carried between ticks so odd DPS values aren't rounded away (or up).
         if (burning) {
-          Combat.damage(e, st.burn * 0.5, Object.assign({ team: 'dm', kind: 'dot' }, st.burnSrc || {}, { elem: 'fire', dot: true }));
+          st.burnAcc = (st.burnAcc || 0) + st.burn * 0.5;
+          const w = Math.floor(st.burnAcc);
+          if (w > 0) { st.burnAcc -= w; Combat.damage(e, w, Object.assign({ team: 'dm', kind: 'dot' }, st.burnSrc || {}, { elem: 'fire', dot: true })); }
           if (Math.random() < 0.7) FX.burst(e.x, e.y - 0.2, { n: 3, colors: ['#ffb347', '#ff6a1f', '#ffe066'], speed: 0.8, life: 0.5, size: 2, grav: -3 });
         }
         if (bleeding && !e.dead) {
-          Combat.damage(e, st.bleed * 0.5, Object.assign({ team: 'dm', kind: 'dot' }, st.bleedSrc || {}, { elem: 'phys', dot: true }));
+          st.bleedAcc = (st.bleedAcc || 0) + st.bleed * 0.5;
+          const w = Math.floor(st.bleedAcc);
+          if (w > 0) { st.bleedAcc -= w; Combat.damage(e, w, Object.assign({ team: 'dm', kind: 'dot' }, st.bleedSrc || {}, { elem: 'phys', dot: true })); }
           FX.burst(e.x, e.y, { n: 2, colors: ['#a0101a', '#d02030'], speed: 0.6, life: 0.5, size: 2, grav: 4 });
         }
       }
-    } else st.dotT = 0;
+    } else { st.dotT = 0; st.burnAcc = 0; st.bleedAcc = 0; }
   },
   /** Movement multiplier from slows / roots / stuns / buffs (0 = cannot move). */
   speedMul(e) {
@@ -753,7 +758,7 @@ const Combat = {
     if (t.team === 'hero') {
       if (t.st.exposed) a *= 1 + CFG.torchExposed;
       if (trapish) {
-        if (hasPerk('glass_cannon')) a *= 1.6;
+        if (hasPerk('glass_cannon')) a *= 1.4;
         if (t.elite) a *= CFG.eliteTrapResist;
       }
       const fr = HERO_CLASSES[t.type].fireResist;
@@ -810,11 +815,10 @@ const Combat = {
         if (S.ws) S.ws.trapKills[trapId] = (S.ws.trapKills[trapId] || 0) + 1;
       }
       Danger.add(tx, ty, 6, 2);
-      S.corpses.push({ x: t.x, y: t.y, type: t.type, t: CFG.corpseLife, uid: t.uid, face: t.face || 1, boss: t.boss || null });
-      if (hasPerk('necromancy') && !t.boss && Math.random() < 0.25) {
-        const m = Monsters.summon('skeleton', t.x, t.y, { temp: true, risen: true });
-        if (m) FX.text(t.x, t.y - 1, 'Risen!', '#bb88ff', { size: 11 });
-      }
+      // Necromancy first: a hero that rises as a Skeleton leaves no corpse (so a Lich can't raise it twice).
+      const risen = hasPerk('necromancy') && !t.boss && Math.random() < 0.25 ? Monsters.summon('skeleton', t.x, t.y, { temp: true, risen: true }) : null;
+      if (risen) FX.text(t.x, t.y - 1, 'Risen!', '#bb88ff', { size: 11 });
+      else S.corpses.push({ x: t.x, y: t.y, type: t.type, t: CFG.corpseLife, uid: t.uid, face: t.face || 1, boss: t.boss || null });
       if (hasPerk('soul_harvest')) S.mana = Math.min(S.manaMax, S.mana + 4);
       if (t.boss) {
         S.stats.bossKills++;
@@ -926,6 +930,8 @@ const Proj = {
  * -------------------------------------------------------------------------- */
 const Heart = {
   cx() { return S.heart.x + 0.5; },
+  /** Multiplier on the retaliation pulse (Heart of Thorns doubles it). */
+  pulseMul() { return hasPerk('thorns') ? 2 : 1; },
   cy() { return S.heart.y + 0.5; },
   damage(amt, src = {}) {
     if (S.phase !== 'wave' || S.heartHp <= 0 || S.endingT >= 0) return;
@@ -941,8 +947,8 @@ const Heart = {
     SFX.play('heart');
     if (S.heartHp <= 0) {
       if (hasPerk('undying_heart') && !S.undyingUsed) {
-        S.undyingUsed = true; S.heartHp = 1;
-        for (const h of Spatial.heroesInRadius(this.cx(), this.cy(), 5)) Status.apply(h, 'fear', { dur: 4, x: this.cx(), y: this.cy() });
+        S.undyingUsed = true; S.heartHp = Math.max(1, Math.round(S.heartMax * 0.25));
+        for (const h of Spatial.heroesInRadius(this.cx(), this.cy(), 5)) Status.apply(h, 'fear', { dur: 6, x: this.cx(), y: this.cy() });
         FX.ring(this.cx(), this.cy(), { color: '#ff7ad9', r0: 0.5, r1: 5, life: 0.8, width: 4 });
         FX.flash('#ff7ad9', 0.3);
         SFX.play('fear');
@@ -970,7 +976,7 @@ const Heart = {
         }
       }
       if (near.length) {
-        const mul = hasPerk('thorns') ? 3 : 1;
+        const mul = this.pulseMul();
         for (const h of near) Combat.damage(h, (CFG.heartPulseDmg + CFG.heartPulsePct * h.maxHp) * mul, { team: 'dm', kind: 'heart', id: 'heart', elem: 'magic' });
         FX.ring(this.cx(), this.cy(), { color: hasPerk('thorns') ? '#ff3b6b' : '#ff7a9a', r0: 0.4, r1: CFG.heartPulseRange + 0.3, life: 0.45, width: 3 });
       }

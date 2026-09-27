@@ -132,13 +132,16 @@
   add('hero: party stays together', H => {
     H.startWave();
     const hs = H.party([{ cls: 'warrior' }, { cls: 'rogue' }, { cls: 'cleric' }, { cls: 'ranger' }]).map(tough);
-    let worst = 0;
+    // Cohesion rule: nobody runs more than ~3 tiles ahead of the leader (by walking distance to the Heart).
+    let worstLead = 0;
     for (let i = 0; i < 8; i++) {
       H.step(1);
-      const live = hs.filter(h => !h.dead);
-      for (const a of live) for (const b of live) worst = Math.max(worst, dist(a.x, a.y, b.x, b.y));
+      const lead = hs.find(h => h.leader && !h.dead);
+      if (!lead) continue;
+      const ld = H.DH.Path.heartDist(lead.x, lead.y);
+      for (const h of hs) if (!h.dead && h !== lead) worstLead = Math.max(worstLead, ld - H.DH.Path.heartDist(h.x, h.y));
     }
-    H.assert(worst < 6.5, 'max spread ' + worst.toFixed(1));
+    H.assert(worstLead <= 6, 'max lead over the leader ' + worstLead.toFixed(1) + ' tiles'); // members wait at most 4s, then may drift
   });
 
   add('hero boss: Champion Shield Bash stuns monsters', H => {

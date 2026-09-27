@@ -479,3 +479,19 @@ function heroWaveScale(n) {
   const k = Math.max(0, n - 1);
   return { hp: (1 + CFG.heroHpPerWave * k) * Math.pow(CFG.heroHpGrowth, k), dmg: 1 + CFG.heroDmgPerWave * k };
 }
+
+/**
+ * Every multiplier that applies to one adventurer — wave scaling × elite × hero boss × perks —
+ * in one place, so Heroes.create, the kill bounty and the UI's estimates can never drift apart.
+ * @param o { elite, boss } @returns { hp, dmg, spd, bounty } multipliers of the class base stats
+ */
+function heroStatMuls(o = {}, wave = S ? S.wave : 1) {
+  const w = Math.max(1, wave | 0), sc = heroWaveScale(w);
+  const m = { hp: sc.hp, dmg: sc.dmg, spd: 1, bounty: 1 + CFG.bountyPerWave * (w - 1) };
+  if (o.elite) { m.hp *= CFG.eliteHpMul; m.dmg *= CFG.eliteDmgMul; m.spd *= CFG.eliteSpeedMul; m.bounty *= CFG.eliteBountyMul; }
+  const b = o.boss && HERO_BOSSES[o.boss];
+  if (b) { m.hp *= b.hpMul; m.dmg *= b.dmgMul; m.spd *= b.speedMul; m.bounty *= CFG.heroBossBountyMul; }
+  if (hasPerk('midas')) m.hp *= 1.2;
+  if (hasPerk('blood_money')) m.bounty *= 2;
+  return m;
+}

@@ -51,6 +51,7 @@ const Game = {
   /** Decorative dungeon behind the title screen. */
   toTitle() {
     S = makeState();
+    Path.reset();
     Grid.init(CFG.gridSizes[0][0], CFG.gridSizes[0][1]);
     FX.clear();
     S.phase = 'title';
@@ -59,6 +60,7 @@ const Game = {
 
   newRun() {
     S = makeState();
+    Path.reset();
     FX.clear();
     Grid.init(CFG.gridSizes[0][0], CFG.gridSizes[0][1]);
     Light.recompute();

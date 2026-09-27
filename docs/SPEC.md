@@ -39,7 +39,7 @@ for every name referenced below.
 
 | File | Owns (top-level names) |
 |---|---|
-| `src/00_data.js` (core) | utils, `TS`, `SIM_DT`, `CFG`, `T`, content tables (`WALL_DEF`, `HERO_CLASSES`, `HERO_BOSSES`, `HERO_BOSS_ORDER`, `TRAPS`, `MONSTERS`, `BOSSES`, `OBJECTS`, `BUILD_TABS`, `POWERS`, `RARITY`, `PERKS`, `PERK_BY_ID`), `contentDef`, `hasPerk` |
+| `src/00_data.js` (core) | utils, `TS`, `SIM_DT`, `CFG`, `T`, content tables (`WALL_DEF`, `HERO_CLASSES`, `HERO_BOSSES`, `HERO_BOSS_ORDER`, `TRAPS`, `MONSTERS`, `BOSSES`, `OBJECTS`, `BUILD_TABS`, `POWERS`, `RARITY`, `PERKS`, `PERK_BY_ID`), `contentDef`, `hasPerk`, `heroWaveScale`, `heroStatMuls` |
 | `src/05_engine.js` (core) | `S`, `makeState`, `Grid`, `MinHeap`, `Path`, `heroSmartness`, `Danger`, `Light`, `trapKnown`, `Lures`, `makeStatus`, `makeEntity`, `Spatial`, `Status`, `Combat`, `Proj`, `Heart`, `Econ`, `Build` |
 | `src/08_fx.js` (core) | `FX`, `SFX` |
 | `src/20_heroes.js` | `Heroes` |

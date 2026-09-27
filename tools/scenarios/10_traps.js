@@ -26,6 +26,7 @@
     const s = H.place('trap', 'pit', 5, my);
     H.startWave(); H.keepAlive();
     const h = H.hero('rogue', 2, my, { hp: 30 });
+    h.ai.disarmFail.add(s.uid); // this test is about the pit, not the rogue's disarm roll
     H.assert(H.until(() => h.dead, 15) >= 0, 'weak hero killed');
     H.assert(s.broken, 'pit used up');
     H.assert((H.S.stats.trapKills.pit || 0) === 1, 'kill credited to pit');

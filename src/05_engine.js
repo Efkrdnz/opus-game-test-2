@@ -78,8 +78,6 @@ const Grid = {
     const t = S.tiles[y * S.cols + x].type;
     return t === T.WALL || t === T.ROCK;
   },
-  /** Floor-like tiles that entities can stand on (barricades are handled separately). */
-  isOpen(x, y) { return !this.isSolid(x, y); },
   /** Unbroken barricade on this tile? */
   barricadeAt(x, y) {
     const t = this.tile(x, y);
@@ -147,8 +145,13 @@ const Grid = {
       const oldBorder = x === 0 || y === 0 || y === or - 1; // old right border stays the right border
       const nt = this.tile(nx, ny);
       if (!nt) continue;
-      if (x === oc - 1) { nt.type = T.ROCK; continue; }
-      if (oldBorder) { nt.type = T.FLOOR; continue; } // old left/top/bottom edge opens up (incl. old entrance)
+      if (x === oc - 1) { nt.type = T.ROCK; nt.s = ot.s; continue; } // right border stays; keeps mounted Arrow Walls
+      if (oldBorder) {
+        // The old left/top/bottom edge opens up (incl. the old entrance) — except rock carrying an
+        // Arrow Wall, which stays as a pillar (it was solid already, so no route is lost).
+        if (ot.s) { nt.type = T.ROCK; nt.s = ot.s; continue; }
+        nt.type = T.FLOOR; continue;
+      }
       nt.type = ot.type; nt.s = ot.s; nt.paid = ot.paid; nt.rubble = ot.rubble; nt.deco = ot.deco;
       S.danger[ny * cols + nx] = oldDanger[y * oc + x];
     }
@@ -163,6 +166,9 @@ const Grid = {
     S.entrance = { x: 0, y: Math.floor(rows / 2) };
     this.tile(S.entrance.x, S.entrance.y).type = T.ENTRANCE;
     this.tile(S.heart.x, S.heart.y).type = T.HEART;
+    // Effects already in flight (e.g. a perk's heal ring) move with the world.
+    for (const a of [FX.parts, FX.texts, FX.rings, FX.tileFlashes]) for (const o of a) { o.x += dx; o.y += dy; }
+    for (const b of FX.beams) { b.x0 += dx; b.x1 += dx; b.y0 += dy; b.y1 += dy; }
     // A few new outcrops in the freshly dug area.
     this.scatterRocksIn(1, dx + 1, 1, rows - 1, 2 + ((Math.random() * 2) | 0));
     Path.bump();
@@ -245,14 +251,21 @@ const Grid = {
     if (!chk.ok) return false;
     const t = this.tile(x, y);
     t.type = T.WALL; t.rubble = true; t.paid = 0;
+    // Shove to the nearest neighbour a unit may stand on: never the Heart, the Entrance, a standing
+    // barricade, or diagonally through a wall corner (falls back to any open tile if boxed in).
     const shove = e => {
-      let best = null, bd = 1e9;
+      let best = null, bd = 1e9, loose = null, ld = 1e9;
       for (const [ddx, ddy] of DIRS8) {
         const nx = x + ddx, ny = y + ddy;
         if (this.isSolid(nx, ny)) continue;
         const d = dist(e.x, e.y, nx + 0.5, ny + 0.5);
+        if (d < ld) { ld = d; loose = [nx, ny]; }
+        const tt = this.tile(nx, ny).type;
+        if (tt === T.HEART || tt === T.ENTRANCE || this.barricadeAt(nx, ny)) continue;
+        if (ddx && ddy && (this.isSolid(x + ddx, y) || this.isSolid(x, y + ddy))) continue;
         if (d < bd) { bd = d; best = [nx, ny]; }
       }
+      best = best || loose;
       if (best) { e.x = best[0] + 0.5; e.y = best[1] + 0.5; }
       e.path = null;
     };
@@ -274,7 +287,7 @@ const Grid = {
  * 3. PATHFINDING
  *    • reachable()  — BFS validity check used by every wall placement.
  *    • astar()      — weighted A* with a caller-supplied cost function.
- *    • distance fields from the Heart and the Entrance (cached per pathVersion).
+ *    • a distance field from the Heart (cached per pathVersion).
  * -------------------------------------------------------------------------- */
 class MinHeap {
   constructor() { this.k = []; this.v = []; }
@@ -311,11 +324,13 @@ class MinHeap {
 
 const Path = {
   _n: 0, _g: null, _came: null, _stamp: null, _closed: null, _gen: 0, _heap: new MinHeap(),
-  _heartField: null, _heartVer: -1, _entField: null, _entVer: -1,
+  _heartField: null, _heartVer: -1,
   _preview: null, _previewKey: '',
 
   /** Call whenever walkability, structures or traps change. */
   bump() { if (S) S.pathVersion++; },
+  /** Forget every cache (a new run restarts the version counters, so stale keys could collide). */
+  reset() { this._heartField = this._preview = null; this._heartVer = -1; this._previewKey = ''; },
 
   _ensure() {
     const n = S.cols * S.rows;
@@ -385,14 +400,6 @@ const Path = {
     }
     x = Math.floor(x); y = Math.floor(y);
     return Grid.inb(x, y) ? this._heartField[y * S.cols + x] : Infinity;
-  },
-  /** Walking distance (tiles) from (x,y) to the Entrance; Infinity if cut off. */
-  entranceDist(x, y) {
-    if (this._entVer !== S.pathVersion || !this._entField || this._entField.length !== S.cols * S.rows) {
-      this._entField = this._field(S.entrance.x, S.entrance.y); this._entVer = S.pathVersion;
-    }
-    x = Math.floor(x); y = Math.floor(y);
-    return Grid.inb(x, y) ? this._entField[y * S.cols + x] : Infinity;
   },
 
   /**
@@ -601,16 +608,6 @@ const Spatial = {
     }
     return out;
   },
-  monstersInRadius(x, y, r, includeDisguised = false) {
-    const out = [], r2 = r * r;
-    for (const m of S.monsters) {
-      if (m.dead || m.removed) continue;
-      if (!includeDisguised && m.disguised) continue;
-      const dx = m.x - x, dy = m.y - y;
-      if (dx * dx + dy * dy <= r2) out.push(m);
-    }
-    return out;
-  },
   nearestHero(x, y, r, filter) {
     let best = null, bd = r * r;
     for (const h of S.heroes) {
@@ -676,7 +673,7 @@ const Status = {
       case 'stun': st.stunT = Math.max(st.stunT, o.dur * bossResist); break;
       case 'root': st.rootT = Math.max(st.rootT, o.dur * bossResist); break;
       case 'fear': {
-        if (e.team === 'hero' && (HERO_CLASSES[e.type].fearImmune || e.boss)) {
+        if (this.fearImmune(e)) {
           FX.text(e.x, e.y - 0.6, 'Immune', '#ffe28a', { size: 10 });
           return false;
         }
@@ -691,6 +688,8 @@ const Status = {
     }
     return true;
   },
+  /** Paladins and hero bosses shrug off Fear (single source of truth for powers, UI and render). */
+  fearImmune(e) { return !!e && e.team === 'hero' && (!!(HERO_CLASSES[e.type] && HERO_CLASSES[e.type].fearImmune) || !!e.boss); },
   cleanse(e) {
     const st = e.st;
     st.slowT = st.burnT = st.bleedT = st.stunT = st.rootT = st.fearT = 0;
@@ -1007,14 +1006,7 @@ const Econ = {
     if (amt > 0) UI.toast(`A thief escaped with ${amt} gold!`, 'bad');
     return amt;
   },
-  bounty(h) {
-    const base = HERO_CLASSES[h.type].gold;
-    let g = base * (1 + CFG.bountyPerWave * (S.wave - 1));
-    if (h.elite) g *= CFG.eliteBountyMul;
-    if (h.boss) g *= CFG.heroBossBountyMul;
-    if (hasPerk('blood_money')) g *= 2;
-    return Math.round(g);
-  },
+  bounty(h) { return Math.round(HERO_CLASSES[h.type].gold * heroStatMuls({ elite: h.elite, boss: h.boss }).bounty); },
   waveIncome() {
     let g = CFG.baseIncome + CFG.incomePerWave * S.wave;
     if (hasPerk('midas')) g *= 2;
